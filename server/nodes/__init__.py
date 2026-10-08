@@ -15,6 +15,7 @@ from .human_input_node import HumanInputNode
 from .prompt_styler_node import PromptStylerNode
 from .image_gen_node import ImageGenNode
 from .vision_node import VisionNode
+from .system1_reflex_node import System1ReflexNode
 
 __all__ = [
     "BaseNode",
@@ -35,5 +36,6 @@ __all__ = [
     "HumanInputNode",
     "PromptStylerNode",
     "ImageGenNode",
-    "VisionNode"
+    "VisionNode",
+    "System1ReflexNode"
 ]

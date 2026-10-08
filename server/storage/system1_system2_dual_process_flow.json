@@ -1,0 +1,148 @@
+{
+  "id": "system1_system2_dual_process_flow",
+  "name": "System 1 / System 2 Dual Cognitive Flow",
+  "description": "Fast & Slow Thinking Architecture: System 1 handles instant reflexes (< 1ms chitchat & guardrails) while escalating complex analytical tasks to System 2 (LLM reasoning).",
+  "nodes": [
+    {
+      "id": "node_input",
+      "type": "input",
+      "title": "User Query Input",
+      "position": { "x": 60, "y": 260 },
+      "data": {
+        "title": "User Query Input",
+        "config": {
+          "default_query": "Xin chào! Bạn có thể giúp tôi giải thích kiến trúc System 1 và System 2 không?"
+        }
+      }
+    },
+    {
+      "id": "node_system1",
+      "type": "system1_reflex",
+      "title": "System 1: Fast Reflex Engine",
+      "position": { "x": 420, "y": 240 },
+      "data": {
+        "title": "System 1: Fast Reflex Engine",
+        "config": {
+          "enable_guardrails": true,
+          "enable_fast_chitchat": true,
+          "confidence_threshold": 0.85,
+          "default_action": "system_2"
+        }
+      }
+    },
+    {
+      "id": "node_output_fast",
+      "type": "output",
+      "title": "Fast Instant Reply (< 1ms)",
+      "position": { "x": 860, "y": 80 },
+      "data": {
+        "title": "Fast Instant Reply (< 1ms)",
+        "config": {
+          "prefix": "⚡ **[Phản xạ System 1 - Phản hồi tức thì < 1ms]:**\n\n",
+          "suffix": "\n\n_⚡ Zero-cost token, ultra-low latency response._",
+          "output_key": "reply"
+        }
+      }
+    },
+    {
+      "id": "node_prompt_system2",
+      "type": "prompt",
+      "title": "System 2 Prompt Formatter",
+      "position": { "x": 860, "y": 280 },
+      "data": {
+        "title": "System 2 Prompt Formatter",
+        "config": {
+          "system_template": "Bạn là chuyên gia AI hoạt động ở tầng Nhận thức Hệ thống 2 (System 2: Deep Cognitive Thinking & Analytical Reasoning). Hãy phân tích kỹ lưỡng, đưa ra lời giải logic, mạch lạc và sâu sắc cho câu hỏi sau:",
+          "user_template": "Câu hỏi cần tư duy sâu:\n{input}"
+        }
+      }
+    },
+    {
+      "id": "node_llm_system2",
+      "type": "llm",
+      "title": "System 2 LLM Inference",
+      "position": { "x": 1220, "y": 280 },
+      "data": {
+        "title": "System 2 LLM Inference",
+        "config": {
+          "provider": "simulator",
+          "model": "gpt-4o-mini",
+          "temperature": 0.5,
+          "max_tokens": 1024
+        }
+      }
+    },
+    {
+      "id": "node_output_system2",
+      "type": "output",
+      "title": "System 2 Analytical Output",
+      "position": { "x": 1580, "y": 280 },
+      "data": {
+        "title": "System 2 Analytical Output",
+        "config": {
+          "prefix": "🧠 **[Hệ thống 2 - Tư duy Phân tích Chuyên sâu]:**\n\n",
+          "suffix": "\n\n_🧠 Deliberate reasoning verified by ZFlow Engine._",
+          "output_key": "reply"
+        }
+      }
+    },
+    {
+      "id": "node_output_blocked",
+      "type": "output",
+      "title": "Security Guardrail Alert",
+      "position": { "x": 860, "y": 480 },
+      "data": {
+        "title": "Security Guardrail Alert",
+        "config": {
+          "prefix": "🛡️ **[Cảnh báo An ninh]:**\n\n",
+          "suffix": "\n\n_🛡️ Blocked automatically by System 1 Reflex Guardrail._",
+          "output_key": "reply"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-input-system1",
+      "source": "node_input",
+      "target": "node_system1",
+      "sourceHandle": "query",
+      "targetHandle": "query"
+    },
+    {
+      "id": "edge-system1-fast",
+      "source": "node_system1",
+      "target": "node_output_fast",
+      "sourceHandle": "fast_reply",
+      "targetHandle": "response_text"
+    },
+    {
+      "id": "edge-system1-prompt",
+      "source": "node_system1",
+      "target": "node_prompt_system2",
+      "sourceHandle": "system_2",
+      "targetHandle": "input_text"
+    },
+    {
+      "id": "edge-prompt-llm",
+      "source": "node_prompt_system2",
+      "target": "node_llm_system2",
+      "sourceHandle": "prompt",
+      "targetHandle": "prompt"
+    },
+    {
+      "id": "edge-llm-output",
+      "source": "node_llm_system2",
+      "target": "node_output_system2",
+      "sourceHandle": "text",
+      "targetHandle": "response_text"
+    },
+    {
+      "id": "edge-system1-blocked",
+      "source": "node_system1",
+      "target": "node_output_blocked",
+      "sourceHandle": "blocked",
+      "targetHandle": "response_text"
+    }
+  ]
+}

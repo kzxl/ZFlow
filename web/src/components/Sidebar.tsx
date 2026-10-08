@@ -23,7 +23,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   HelpCircle,
-  Cpu
+  Cpu,
+  Zap
 } from 'lucide-react';
 import { NodeMetadata, NodeCategory } from '../types/workflow';
 
@@ -43,7 +44,8 @@ const ICONS: Record<string, React.ElementType> = {
   Database,
   Send,
   Code2,
-  Globe
+  Globe,
+  Zap
 };
 
 const CATEGORY_COLORS: Record<string, { badge: string; text: string; dot: string }> = {
