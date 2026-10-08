@@ -51,6 +51,8 @@ class KnowledgeStore:
                     title TEXT NOT NULL,
                     source_type TEXT NOT NULL,
                     chunk_count INTEGER DEFAULT 0,
+                    allowed_roles TEXT DEFAULT '["all"]',
+                    is_learned INTEGER DEFAULT 0,
                     created_at REAL NOT NULL
                 )
             """)
@@ -62,11 +64,25 @@ class KnowledgeStore:
                     content TEXT NOT NULL,
                     metadata_json TEXT,
                     terms_json TEXT,
+                    allowed_roles TEXT DEFAULT '["all"]',
+                    is_learned INTEGER DEFAULT 0,
                     created_at REAL NOT NULL,
                     FOREIGN KEY(doc_id) REFERENCES documents(id) ON DELETE CASCADE
                 )
             """)
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_chunks_doc_id ON chunks(doc_id)")
+            
+            # Safe migrations for existing databases
+            for col, col_def in [("allowed_roles", "TEXT DEFAULT '[\"all\"]'"), ("is_learned", "INTEGER DEFAULT 0")]:
+                try:
+                    cursor.execute(f"ALTER TABLE documents ADD COLUMN {col} {col_def}")
+                except Exception:
+                    pass
+                try:
+                    cursor.execute(f"ALTER TABLE chunks ADD COLUMN {col} {col_def}")
+                except Exception:
+                    pass
+
             conn.commit()
 
     def _seed_default_knowledge(self):
@@ -92,8 +108,16 @@ class KnowledgeStore:
             "- Gói Tùy biến Dedicated (On-Premise): Dành riêng cho tập đoàn, triển khai hạ tầng máy chủ nội bộ hoặc VPC bảo mật cao."
         )
 
-        self.add_document("chinh_sach_bao_hanh", "Chính sách Bảo hành & Đổi trả ZFlow", sample_policy, "policy")
-        self.add_document("bang_gia_dich_vu", "Bảng giá Dịch vụ ZFlow", sample_pricing, "pricing")
+        self.add_document("chinh_sach_bao_hanh", "Chính sách Bảo hành & Đổi trả ZFlow", sample_policy, "policy", allowed_roles=["all"])
+        self.add_document("bang_gia_dich_vu", "Bảng giá Dịch vụ ZFlow", sample_pricing, "pricing", allowed_roles=["all"])
+        
+        sample_salary = (
+            "Báo cáo Lương & Thưởng Quý 4 (Tuyệt mật nội bộ):\n"
+            "- Tổng quỹ lương: 2.8 tỷ VNĐ/tháng.\n"
+            "- Thưởng hiệu suất (KPI cấp quản lý): 20% doanh thu thuần.\n"
+            "- Cấp độ xem xét: Chỉ dành riêng cho Ban Giám Đốc (Admin) và Trưởng phòng (Manager)."
+        )
+        self.add_document("bang_luong_noi_bo", "Báo cáo Lương & Thưởng Nội bộ", sample_salary, "confidential", allowed_roles=["admin", "manager"])
 
     def add_document(
         self,
@@ -102,15 +126,18 @@ class KnowledgeStore:
         content: str,
         source_type: str = "text",
         chunk_size: int = 400,
-        chunk_overlap: int = 60
+        chunk_overlap: int = 60,
+        allowed_roles: Optional[List[str]] = None,
+        is_learned: int = 0
     ) -> Dict[str, Any]:
         """
         Splits document into semantic chunks with overlap and indexes term frequencies.
+        Supports RBAC roles and self-learning metadata.
         """
         if not content.strip():
             return {"status": "error", "message": "Content is empty"}
 
-        # Semantic paragraph and sliding window chunking
+        roles_json = json.dumps(allowed_roles or ["all"])
         raw_chunks = self._chunk_text(content, chunk_size, chunk_overlap)
         now = time.time()
 
@@ -119,8 +146,8 @@ class KnowledgeStore:
             # Upsert document
             cursor.execute("DELETE FROM chunks WHERE doc_id = ?", (doc_id,))
             cursor.execute(
-                "INSERT OR REPLACE INTO documents (id, title, source_type, chunk_count, created_at) VALUES (?, ?, ?, ?, ?)",
-                (doc_id, title, source_type, len(raw_chunks), now)
+                "INSERT OR REPLACE INTO documents (id, title, source_type, chunk_count, allowed_roles, is_learned, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (doc_id, title, source_type, len(raw_chunks), roles_json, is_learned, now)
             )
 
             # Insert chunks with term frequency dictionary
@@ -130,14 +157,23 @@ class KnowledgeStore:
                 for t in tokens:
                     term_freq[t] = term_freq.get(t, 0) + 1
 
+                meta = {
+                    "title": title,
+                    "source": source_type,
+                    "allowed_roles": allowed_roles or ["all"],
+                    "is_learned": is_learned
+                }
+
                 cursor.execute(
-                    "INSERT INTO chunks (doc_id, chunk_index, content, metadata_json, terms_json, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO chunks (doc_id, chunk_index, content, metadata_json, terms_json, allowed_roles, is_learned, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         doc_id,
                         idx,
                         chunk_text,
-                        json.dumps({"title": title, "source": source_type}, ensure_ascii=False),
+                        json.dumps(meta, ensure_ascii=False),
                         json.dumps(term_freq, ensure_ascii=False),
+                        roles_json,
+                        is_learned,
                         now
                     )
                 )
@@ -147,8 +183,31 @@ class KnowledgeStore:
             "status": "success",
             "doc_id": doc_id,
             "title": title,
-            "chunk_count": len(raw_chunks)
+            "chunk_count": len(raw_chunks),
+            "allowed_roles": allowed_roles or ["all"],
+            "is_learned": is_learned
         }
+
+    def self_learn_fact(
+        self,
+        title: str,
+        content: str,
+        source_type: str = "dialogue_learned",
+        allowed_roles: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Self-Learning mechanism: Ingests new facts or verified explanations directly
+        into the persistent Knowledge Base with high retrieval priority.
+        """
+        doc_id = f"learned_{int(time.time())}_{abs(hash(title)) % 10000}"
+        return self.add_document(
+            doc_id=doc_id,
+            title=f"💡 [Tự học] {title}",
+            content=content,
+            source_type=source_type,
+            allowed_roles=allowed_roles or ["all"],
+            is_learned=1
+        )
 
     def _chunk_text(self, text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
         """
@@ -193,10 +252,12 @@ class KnowledgeStore:
         query: str,
         top_k: int = 3,
         min_score: float = 0.15,
-        doc_filter: Optional[str] = None
+        doc_filter: Optional[str] = None,
+        user_role: str = "all"
     ) -> List[Dict[str, Any]]:
         """
-        Performs hybrid BM25/TF-IDF similarity ranking across all indexed chunks.
+        Performs hybrid BM25/TF-IDF similarity ranking with RBAC role-based filtering
+        and Self-Learning freshness boosting.
         """
         query_tokens = tokenize(query)
         if not query_tokens:
@@ -206,9 +267,14 @@ class KnowledgeStore:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             if doc_filter:
-                cursor.execute("SELECT id, doc_id, chunk_index, content, metadata_json, terms_json FROM chunks WHERE doc_id = ?", (doc_filter,))
+                cursor.execute(
+                    "SELECT id, doc_id, chunk_index, content, metadata_json, terms_json, allowed_roles, is_learned FROM chunks WHERE doc_id = ?",
+                    (doc_filter,)
+                )
             else:
-                cursor.execute("SELECT id, doc_id, chunk_index, content, metadata_json, terms_json FROM chunks")
+                cursor.execute(
+                    "SELECT id, doc_id, chunk_index, content, metadata_json, terms_json, allowed_roles, is_learned FROM chunks"
+                )
             rows = cursor.fetchall()
 
         if not rows:
@@ -227,18 +293,35 @@ class KnowledgeStore:
             for t in query_tokens:
                 if t in tf:
                     df[t] += 1
+
+            # Parse allowed_roles
+            roles = ["all"]
+            try:
+                raw_r = r["allowed_roles"]
+                if raw_r:
+                    roles = json.loads(raw_r) if isinstance(raw_r, str) else raw_r
+            except Exception:
+                roles = ["all"]
+
             chunk_data.append({
                 "id": r["id"],
                 "doc_id": r["doc_id"],
                 "chunk_index": r["chunk_index"],
                 "content": r["content"],
                 "metadata": json.loads(r["metadata_json"]) if r["metadata_json"] else {},
+                "terms_json": r["terms_json"],
+                "allowed_roles": roles,
+                "is_learned": r["is_learned"] or 0,
                 "tf": tf
             })
 
         # Calculate BM25 / TF-IDF score for each chunk
         results = []
         for c in chunk_data:
+            # RBAC Role Filtering: Skip chunk if user lacks required role
+            chunk_roles = c.get("allowed_roles") or ["all"]
+            if user_role != "admin" and "all" not in chunk_roles and user_role not in chunk_roles:
+                continue
             score = 0.0
             chunk_len = sum(c["tf"].values())
             for t in query_tokens:
@@ -259,6 +342,9 @@ class KnowledgeStore:
             for word in query_tokens:
                 if word in clean_content:
                     score += 0.3
+
+            if c.get("is_learned") == 1:
+                score += 1.0  # Freshness boost for self-learned knowledge
 
             norm_score = round(min(score / 5.0, 1.0), 3)
             if norm_score >= min_score:

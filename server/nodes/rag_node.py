@@ -17,13 +17,16 @@ class RagNode(BaseNode):
     icon = "BookOpen"
 
     inputs = [
-        PortDef(name="query", data_type="string", label="Search Query", required=True)
+        PortDef(name="query", data_type="string", label="Search Query", required=True),
+        PortDef(name="user_role", data_type="string", label="User Role for RBAC (Optional)", required=False),
+        PortDef(name="learn_fact", data_type="string", label="New Fact to Self-Learn (Optional)", required=False)
     ]
     outputs = [
         PortDef(name="context", data_type="string", label="Formatted Knowledge Context"),
         PortDef(name="chunks", data_type="any", label="Retrieved Chunks List"),
         PortDef(name="top_score", data_type="number", label="Top Similarity Score"),
-        PortDef(name="has_match", data_type="boolean", label="Has Relevant Match")
+        PortDef(name="has_match", data_type="boolean", label="Has Relevant Match"),
+        PortDef(name="learned_status", data_type="string", label="Self-Learning Status")
     ]
 
     config_schema = {
@@ -69,14 +72,54 @@ class RagNode(BaseNode):
             or context.get_variable("input", "")
         ).strip()
 
+        user_role = str(
+            inputs.get("user_role") 
+            or context.get_variable("user_role") 
+            or context.get_variable("role") 
+            or "all"
+        ).strip().lower()
+
+        learn_fact = str(inputs.get("learn_fact") or "").strip()
+        learned_status = "none"
+
+        # 0. Check for Self-Learning trigger (via dedicated port or query commands)
+        fact_to_ingest = ""
+        fact_title = ""
+        if learn_fact:
+            fact_to_ingest = learn_fact
+            fact_title = f"Fact from session {context.session_id}"
+        elif query.startswith("/learn "):
+            fact_to_ingest = query[7:].strip()
+            fact_title = f"User learned: {fact_to_ingest[:30]}"
+        elif "hãy ghi nhớ rằng:" in query.lower() or "ghi nhớ rằng:" in query.lower():
+            idx = query.lower().find("ghi nhớ rằng:")
+            fact_to_ingest = query[idx + len("ghi nhớ rằng:"):].strip()
+            fact_title = f"Fact: {fact_to_ingest[:30]}"
+
+        if fact_to_ingest:
+            learn_res = knowledge_store.self_learn_fact(
+                title=fact_title,
+                content=fact_to_ingest,
+                source_type="self_learning",
+                allowed_roles=["all"]
+            )
+            learned_status = "success"
+            context.log("info", f"Self-Learning RAG ingested new fact: '{fact_to_ingest[:50]}' -> Doc {learn_res['doc_id']}")
+
         top_k = int(config.get("top_k", 3))
         min_score = float(config.get("min_score", 0.20))
         doc_filter = config.get("doc_filter") or None
         fmt = config.get("output_format", "numbered")
         custom_kw = config.get("custom_knowledge", "").strip()
 
-        # 1. Search knowledge store
-        results = knowledge_store.search(query=query, top_k=top_k, min_score=min_score, doc_filter=doc_filter)
+        # 1. Search knowledge store with RBAC role filter
+        results = knowledge_store.search(
+            query=query, 
+            top_k=top_k, 
+            min_score=min_score, 
+            doc_filter=doc_filter,
+            user_role=user_role
+        )
 
         # 2. Append inline custom knowledge if provided and nothing or low matches
         if custom_kw and (not results or len(results) < top_k):
@@ -111,11 +154,13 @@ class RagNode(BaseNode):
         context.set_variable("retrieved_context", formatted_context)
         context.set_variable("knowledge_context", formatted_context)
         context.set_variable("context_data", formatted_context)
-        context.log("info", f"RAG retrieved {len(results)} chunks (top score: {top_score}) for query: '{query[:60]}'")
+        context.set_variable("rag_learned_status", learned_status)
+        context.log("info", f"RAG retrieved {len(results)} chunks for role '{user_role}' (top score: {top_score})")
 
         return {
             "context": formatted_context,
             "chunks": results,
             "top_score": top_score,
-            "has_match": has_match
+            "has_match": has_match,
+            "learned_status": learned_status
         }

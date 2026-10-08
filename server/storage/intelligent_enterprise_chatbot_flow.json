@@ -1,0 +1,274 @@
+{
+  "id": "intelligent_enterprise_chatbot_flow",
+  "name": "Intelligent Enterprise Chatbot Pipeline",
+  "description": "State-of-the-art enterprise conversational architecture featuring System 1 reflex, 2-tier Semantic Cache (<0.1ms), RBAC Permission Guard, Adaptive Context Expansion with Entity Pinning, and Self-Learning RAG.",
+  "nodes": [
+    {
+      "id": "node_input",
+      "type": "input",
+      "title": "User Query & Identity",
+      "position": { "x": 60, "y": 300 },
+      "data": {
+        "title": "User Query & Identity",
+        "config": {
+          "default_query": "Tôi là Nguyễn Văn An, số điện thoại 0912345678. Hãy kiểm tra chính sách bảo mật nội bộ và quy định nhân sự mới nhất cho tôi."
+        }
+      }
+    },
+    {
+      "id": "node_system1",
+      "type": "system1_reflex",
+      "title": "1. System 1 Reflex Engine",
+      "position": { "x": 420, "y": 300 },
+      "data": {
+        "title": "1. System 1 Reflex Engine",
+        "config": {
+          "enable_guardrails": true,
+          "enable_fast_chitchat": true,
+          "confidence_threshold": 0.85,
+          "default_action": "system_2"
+        }
+      }
+    },
+    {
+      "id": "node_output_fast",
+      "type": "output",
+      "title": "⚡ Instant Reflex Reply (<1ms)",
+      "position": { "x": 840, "y": 60 },
+      "data": {
+        "title": "⚡ Instant Reflex Reply (<1ms)",
+        "config": {
+          "prefix": "⚡ **[Phản xạ System 1 - Tức thì < 1ms]:**\n\n",
+          "suffix": "\n\n_⚡ Zero-cost token, ultra-low latency._",
+          "output_key": "reply"
+        }
+      }
+    },
+    {
+      "id": "node_cache",
+      "type": "semantic_cache",
+      "title": "2. Multi-tier Semantic Cache",
+      "position": { "x": 840, "y": 300 },
+      "data": {
+        "title": "2. Multi-tier Semantic Cache",
+        "config": {
+          "mode": "read_or_write",
+          "similarity_threshold": 0.85,
+          "ttl_seconds": 86400
+        }
+      }
+    },
+    {
+      "id": "node_output_cache",
+      "type": "output",
+      "title": "⚡ Cached Answer (<0.1ms)",
+      "position": { "x": 1240, "y": 120 },
+      "data": {
+        "title": "⚡ Cached Answer (<0.1ms)",
+        "config": {
+          "prefix": "💾 **[Semantic Cache Hit < 0.1ms]:**\n\n",
+          "suffix": "\n\n_⚡ Retrieved from Sovereign Local Cache Store with zero LLM token cost._",
+          "output_key": "reply"
+        }
+      }
+    },
+    {
+      "id": "node_permission_guard",
+      "type": "permission_guard",
+      "title": "3. RBAC Permission Guard",
+      "position": { "x": 1240, "y": 360 },
+      "data": {
+        "title": "3. RBAC Permission Guard",
+        "config": {
+          "required_role": "staff",
+          "denial_action": "deny"
+        }
+      }
+    },
+    {
+      "id": "node_output_denied",
+      "type": "output",
+      "title": "⛔ Access Denied Notice",
+      "position": { "x": 1640, "y": 180 },
+      "data": {
+        "title": "⛔ Access Denied Notice",
+        "config": {
+          "prefix": "🛡️ **[Phân Quyền - Quyền Truy Cập Bị Từ Chối]:**\n\n",
+          "suffix": "\n\n_⛔ Gated by ZFlow RBAC Security Policy._",
+          "output_key": "reply"
+        }
+      }
+    },
+    {
+      "id": "node_memory",
+      "type": "memory",
+      "title": "4. Adaptive Memory & Entity Pinning",
+      "position": { "x": 1640, "y": 420 },
+      "data": {
+        "title": "4. Adaptive Memory & Entity Pinning",
+        "config": {
+          "window_size": 6,
+          "strategy": "adaptive_context_expansion",
+          "auto_save": true
+        }
+      }
+    },
+    {
+      "id": "node_rag",
+      "type": "rag",
+      "title": "5. Self-Learning Sovereign RAG",
+      "position": { "x": 2040, "y": 320 },
+      "data": {
+        "title": "5. Self-Learning Sovereign RAG",
+        "config": {
+          "top_k": 3,
+          "similarity_threshold": 0.4,
+          "auto_learn": true,
+          "user_role": "staff"
+        }
+      }
+    },
+    {
+      "id": "node_prompt",
+      "type": "prompt",
+      "title": "6. Unified Context Formatter",
+      "position": { "x": 2440, "y": 320 },
+      "data": {
+        "title": "6. Unified Context Formatter",
+        "config": {
+          "system_template": "Bạn là trợ lý ảo doanh nghiệp thông minh của tập đoàn ZFlow. Hãy sử dụng thông tin thực thể đã ghim, lịch sử hội thoại và tài liệu tri thức nội bộ được cung cấp để trả lời chuyên nghiệp, chính xác và đầy đủ.",
+          "user_template": "=== NGỮ CẢNH HỘI THOẠI & THỰC THỂ CỐ ĐỊNH ===\n{history}\n\n=== TÀI LIỆU NỘI BỘ (ĐÃ QUA LỌC QUYỀN RBAC) ===\n{context}\n\n=== YÊU CẦU CỦA NGƯỜI DÙNG ===\n{input}"
+        }
+      }
+    },
+    {
+      "id": "node_llm",
+      "type": "llm",
+      "title": "7. LLM Cognitive Inference",
+      "position": { "x": 2840, "y": 320 },
+      "data": {
+        "title": "7. LLM Cognitive Inference",
+        "config": {
+          "provider": "simulator",
+          "model": "gpt-4o-mini",
+          "temperature": 0.3,
+          "max_tokens": 1024
+        }
+      }
+    },
+    {
+      "id": "node_output_final",
+      "type": "output",
+      "title": "8. Enterprise Assistant Response",
+      "position": { "x": 3240, "y": 320 },
+      "data": {
+        "title": "8. Enterprise Assistant Response",
+        "config": {
+          "prefix": "🏢 **[ZFlow Enterprise AI Assistant]:**\n\n",
+          "suffix": "\n\n_✨ Đã xử lý qua chuỗi nhận thức: Reflex -> Cache -> RBAC -> Context Expansion -> Self-Learning RAG._",
+          "output_key": "reply"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge_in_sys1",
+      "source": "node_input",
+      "sourceHandle": "query",
+      "target": "node_system1",
+      "targetHandle": "query"
+    },
+    {
+      "id": "edge_sys1_fast",
+      "source": "node_system1",
+      "sourceHandle": "fast_reply",
+      "target": "node_output_fast",
+      "targetHandle": "input"
+    },
+    {
+      "id": "edge_sys1_cache",
+      "source": "node_system1",
+      "sourceHandle": "system_2",
+      "target": "node_cache",
+      "targetHandle": "query"
+    },
+    {
+      "id": "edge_cache_hit",
+      "source": "node_cache",
+      "sourceHandle": "cache_hit",
+      "target": "node_output_cache",
+      "targetHandle": "input"
+    },
+    {
+      "id": "edge_cache_miss",
+      "source": "node_cache",
+      "sourceHandle": "cache_miss",
+      "target": "node_permission_guard",
+      "targetHandle": "query"
+    },
+    {
+      "id": "edge_guard_denied",
+      "source": "node_permission_guard",
+      "sourceHandle": "denied",
+      "target": "node_output_denied",
+      "targetHandle": "input"
+    },
+    {
+      "id": "edge_guard_granted",
+      "source": "node_permission_guard",
+      "sourceHandle": "granted",
+      "target": "node_memory",
+      "targetHandle": "user_message"
+    },
+    {
+      "id": "edge_guard_rag_query",
+      "source": "node_permission_guard",
+      "sourceHandle": "granted",
+      "target": "node_rag",
+      "targetHandle": "query"
+    },
+    {
+      "id": "edge_guard_rag_role",
+      "source": "node_permission_guard",
+      "sourceHandle": "user_role",
+      "target": "node_rag",
+      "targetHandle": "user_role"
+    },
+    {
+      "id": "edge_guard_prompt_input",
+      "source": "node_permission_guard",
+      "sourceHandle": "granted",
+      "target": "node_prompt",
+      "targetHandle": "input"
+    },
+    {
+      "id": "edge_mem_prompt_history",
+      "source": "node_memory",
+      "sourceHandle": "expanded_context",
+      "target": "node_prompt",
+      "targetHandle": "history"
+    },
+    {
+      "id": "edge_rag_prompt_context",
+      "source": "node_rag",
+      "sourceHandle": "context",
+      "target": "node_prompt",
+      "targetHandle": "context"
+    },
+    {
+      "id": "edge_prompt_llm",
+      "source": "node_prompt",
+      "sourceHandle": "prompt",
+      "target": "node_llm",
+      "targetHandle": "prompt"
+    },
+    {
+      "id": "edge_llm_out",
+      "source": "node_llm",
+      "sourceHandle": "reply",
+      "target": "node_output_final",
+      "targetHandle": "input"
+    }
+  ]
+}

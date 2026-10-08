@@ -27,6 +27,8 @@ class MemoryNode(BaseNode):
     outputs = [
         PortDef(name="chat_history", data_type="array", label="Dialogue History (Array)"),
         PortDef(name="formatted_history", data_type="string", label="Formatted String"),
+        PortDef(name="expanded_context", data_type="string", label="Expanded Context with Pinned Facts"),
+        PortDef(name="pinned_entities", data_type="any", label="Pinned Facts & Entities"),
         PortDef(name="turn_count", data_type="number", label="Turn Count"),
         PortDef(name="summary", data_type="string", label="Context Summary")
     ]
@@ -35,8 +37,13 @@ class MemoryNode(BaseNode):
         "strategy": {
             "type": "select",
             "label": "Memory Strategy",
-            "options": ["sliding_window", "token_budget", "summary_buffer", "full_history"],
-            "default": "sliding_window"
+            "options": ["adaptive_context_expansion", "sliding_window", "token_budget", "summary_buffer", "full_history"],
+            "default": "adaptive_context_expansion"
+        },
+        "enable_entity_pinning": {
+            "type": "boolean",
+            "label": "Auto Extract & Pin Key User Facts/Entities",
+            "default": True
         },
         "window_size": {
             "type": "number",
@@ -100,8 +107,50 @@ class MemoryNode(BaseNode):
         active_history: List[Dict[str, Any]] = []
         summary_text = ""
 
+        import re
+
+        # Extract and pin user facts / entities
+        pinned_facts: Dict[str, str] = {}
+        if config.get("enable_entity_pinning", True):
+            for m in raw_history:
+                content = m.get("content", "")
+                if m.get("role") == "user":
+                    # Name extraction
+                    name_match = re.search(
+                        r"(?:tên tôi là|tôi tên là|tôi là|mình là|anh là|chị là|my name is)\s+([\w\s]+?)(?:[,.\n]|$)",
+                        content,
+                        re.IGNORECASE
+                    )
+                    if name_match:
+                        pinned_facts["User Name"] = name_match.group(1).strip()
+                    # Phone extraction
+                    phone_match = re.search(r"\b(0\d{9}|\+84\d{9})\b", content)
+                    if phone_match:
+                        pinned_facts["Phone"] = phone_match.group(1).strip()
+                    # Order / Invoice code
+                    order_match = re.search(r"\b(HĐ-\d+|ORD-\d+|#\d{4,8})\b", content)
+                    if order_match:
+                        pinned_facts["Order / Code"] = order_match.group(1).strip()
+                    # Email
+                    email_match = re.search(r"[\w\.-]+@[\w\.-]+\.\w+", content)
+                    if email_match:
+                        pinned_facts["Email"] = email_match.group(0).strip()
+
+        pinned_str = ""
+        if pinned_facts:
+            pinned_lines = [f"- {k}: {v}" for k, v in pinned_facts.items()]
+            pinned_str = "📌 [THÔNG TIN THỰC THỂ CỐ ĐỊNH TỪ NGƯỜI DÙNG]:\n" + "\n".join(pinned_lines)
+
         # Apply Memory Strategy
-        if strategy == "sliding_window":
+        if strategy == "adaptive_context_expansion":
+            # Dynamic windowing: recent raw turns + past summary
+            active_history = raw_history[-window_size:] if len(raw_history) > window_size else raw_history
+            if len(raw_history) > window_size:
+                older_turns = raw_history[:-window_size]
+                snippets = [f"- {m.get('role').capitalize()}: {m.get('content')[:90]}..." for m in older_turns]
+                summary_text = f"📝 [Tóm tắt ngữ cảnh quá khứ ({len(older_turns)} lượt)]:\n" + "\n".join(snippets[-4:])
+
+        elif strategy == "sliding_window":
             active_history = raw_history[-window_size:] if len(raw_history) > window_size else raw_history
 
         elif strategy == "token_budget":
@@ -135,12 +184,16 @@ class MemoryNode(BaseNode):
         formatted_str = memory_store.format_history_string(active_history, human_prefix=human_prefix, ai_prefix=ai_prefix)
         if summary_text:
             formatted_str = f"{summary_text}\n\n{formatted_str}"
+        if pinned_str:
+            formatted_str = f"{pinned_str}\n\n{formatted_str}"
 
         # Mirror variables into ExecutionContext
         context.chat_history = active_history
         context.set_variable("chat_history", active_history)
         context.set_variable("chat_history_str", formatted_str)
         context.set_variable("formatted_history", formatted_str)
+        context.set_variable("expanded_context", formatted_str)
+        context.set_variable("pinned_entities", pinned_facts)
         context.set_variable("session_turn_count", len(raw_history))
 
         context.log("info", f"Memory retrieved {len(active_history)}/{len(raw_history)} turns for session '{session_id}' [{strategy}]")
@@ -148,6 +201,8 @@ class MemoryNode(BaseNode):
         return {
             "chat_history": active_history,
             "formatted_history": formatted_str,
+            "expanded_context": formatted_str,
+            "pinned_entities": pinned_facts,
             "turn_count": len(raw_history),
             "summary": summary_text
         }

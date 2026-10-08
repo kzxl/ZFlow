@@ -14,8 +14,9 @@ from .agent_node import AgentNode
 from .human_input_node import HumanInputNode
 from .prompt_styler_node import PromptStylerNode
 from .image_gen_node import ImageGenNode
-from .vision_node import VisionNode
 from .system1_reflex_node import System1ReflexNode
+from .permission_guard_node import PermissionGuardNode
+from .semantic_cache_node import SemanticCacheNode
 
 __all__ = [
     "BaseNode",
@@ -37,5 +38,7 @@ __all__ = [
     "PromptStylerNode",
     "ImageGenNode",
     "VisionNode",
-    "System1ReflexNode"
+    "System1ReflexNode",
+    "PermissionGuardNode",
+    "SemanticCacheNode"
 ]

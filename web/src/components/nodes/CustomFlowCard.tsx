@@ -120,6 +120,26 @@ const DEFAULT_PORTS: Record<string, { inputs: PortDefinition[]; outputs: PortDef
       { name: 'system_2', type: 'string', label: '🧠 Escalate (System 2)' },
       { name: 'blocked', type: 'string', label: '🛡️ Guardrail Block' }
     ]
+  },
+  permission_guard: {
+    inputs: [
+      { name: 'query', type: 'string', label: 'Query / Action' },
+      { name: 'user_role', type: 'string', label: 'User Role' }
+    ],
+    outputs: [
+      { name: 'granted', type: 'string', label: '✅ Granted (Authorized)' },
+      { name: 'denied', type: 'string', label: '⛔ Denied (Unauthorized)' }
+    ]
+  },
+  semantic_cache: {
+    inputs: [
+      { name: 'query', type: 'string', label: 'Query' },
+      { name: 'response_to_cache', type: 'string', label: 'Response to Cache' }
+    ],
+    outputs: [
+      { name: 'cache_hit', type: 'string', label: '⚡ Cache Hit (<0.1ms)' },
+      { name: 'cache_miss', type: 'string', label: '🔍 Cache Miss (Forward)' }
+    ]
   }
 };
 
@@ -204,6 +224,20 @@ export const CustomFlowCard: React.FC<CustomFlowCardProps> = ({ id, type, data, 
       { name: 'fast_reply', type: 'string', label: '⚡ Fast Reply (System 1)' },
       { name: 'system_2', type: 'string', label: '🧠 Escalate (System 2)' },
       { name: 'blocked', type: 'string', label: '🛡️ Guardrail Block' }
+    ];
+  }
+
+  if (type === 'permission_guard') {
+    outputs = [
+      { name: 'granted', type: 'string', label: '✅ Granted (Authorized)' },
+      { name: 'denied', type: 'string', label: '⛔ Denied (Unauthorized)' }
+    ];
+  }
+
+  if (type === 'semantic_cache') {
+    outputs = [
+      { name: 'cache_hit', type: 'string', label: '⚡ Cache Hit (<0.1ms)' },
+      { name: 'cache_miss', type: 'string', label: '🔍 Cache Miss (Forward)' }
     ];
   }
 
@@ -569,6 +603,62 @@ export const CustomFlowCard: React.FC<CustomFlowCardProps> = ({ id, type, data, 
             {data.lastOutput?.reply && (
               <p className="text-[10px] text-slate-300 italic line-clamp-2 leading-tight bg-black/40 p-1.5 rounded border border-slate-800/60 font-mono mt-0.5">
                 "{data.lastOutput.reply}"
+              </p>
+            )}
+          </div>
+        )}
+
+        {type === 'permission_guard' && (
+          <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/60 flex flex-col gap-1.5 text-slate-400">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-slate-400">Min Role:</span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/40 uppercase font-mono">
+                {data.config?.required_role || 'staff'}
+              </span>
+            </div>
+            {data.lastOutput?.active_branch && (
+              <div className="flex items-center justify-between text-[10px]">
+                <span>Quyết định:</span>
+                <span className={`font-mono font-semibold px-1 py-0.5 rounded text-[9px] ${
+                  data.lastOutput.active_branch === 'granted' 
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' 
+                    : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                }`}>
+                  {data.lastOutput.active_branch === 'granted' ? '✅ Granted' : '⛔ Denied'}
+                </span>
+              </div>
+            )}
+            {data.lastOutput?.reason && (
+              <p className="text-[10px] text-slate-400 line-clamp-1 italic">
+                {data.lastOutput.reason}
+              </p>
+            )}
+          </div>
+        )}
+
+        {type === 'semantic_cache' && (
+          <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/60 flex flex-col gap-1.5 text-slate-400">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-slate-400">Threshold:</span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-blue-500/20 text-blue-300 border border-blue-500/40">
+                {(data.config?.similarity_threshold ?? 0.85) * 100}% Sim
+              </span>
+            </div>
+            {data.lastOutput?.active_branch && (
+              <div className="flex items-center justify-between text-[10px]">
+                <span>Status:</span>
+                <span className={`font-mono font-semibold px-1 py-0.5 rounded text-[9px] ${
+                  data.lastOutput.active_branch === 'cache_hit' 
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' 
+                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                }`}>
+                  {data.lastOutput.active_branch === 'cache_hit' ? '⚡ 0.1ms Cache Hit' : '🔍 Cache Miss'}
+                </span>
+              </div>
+            )}
+            {data.lastOutput?.cached_response && (
+              <p className="text-[10px] text-slate-300 italic line-clamp-2 leading-tight bg-black/40 p-1.5 rounded border border-slate-800/60 font-mono mt-0.5">
+                "{data.lastOutput.cached_response}"
               </p>
             )}
           </div>
