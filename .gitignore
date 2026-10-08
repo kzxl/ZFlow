@@ -23,6 +23,11 @@ storage/*.json
 !server/storage/default_flow.json
 !server/storage/conversational_memory_flow.json
 
+# Environment & Secrets
+.env
+.env.*
+*.local
+
 # IDE
 .vscode/
 .idea/

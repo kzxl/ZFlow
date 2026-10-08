@@ -42,12 +42,26 @@ export interface CustomNodeData extends Record<string, unknown> {
   [key: string]: unknown;
 }
 
+export interface ExecutionBenchmark {
+  ttftMs?: number;
+  totalTimeMs?: number;
+  tokenCount?: number;
+  tokensPerSec?: number;
+  nodeLatencies?: {
+    nodeId: string;
+    title?: string;
+    type?: string;
+    durationMs: number;
+  }[];
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: number;
   tokens?: number;
+  benchmark?: ExecutionBenchmark;
   nodeSteps?: {
     nodeId: string;
     title: string;

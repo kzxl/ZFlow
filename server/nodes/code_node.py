@@ -76,7 +76,13 @@ class CodeNode(BaseNode):
             if "main" not in local_scope or not callable(local_scope["main"]):
                 raise ValueError("Script must define a 'main(inputs, context)' function.")
 
-            res = local_scope["main"](inputs, context.variables)
+            inputs_normalized = dict(inputs)
+            if "input" in inputs_normalized and "input_data" not in inputs_normalized:
+                inputs_normalized["input_data"] = inputs_normalized["input"]
+            if "data" in inputs_normalized and "input_data" not in inputs_normalized:
+                inputs_normalized["input_data"] = inputs_normalized["data"]
+
+            res = local_scope["main"](inputs_normalized, context.variables)
             context.set_variable("code_result", res)
             
             return {

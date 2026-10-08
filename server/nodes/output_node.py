@@ -46,7 +46,11 @@ class OutputNode(BaseNode):
     }
 
     async def execute(self, inputs: Dict[str, Any], config: Dict[str, Any], context: ExecutionContext) -> Dict[str, Any]:
-        raw_val = inputs.get("response_text") or context.get_variable("text", "")
+        raw_val = inputs.get("response_text") or inputs.get("input")
+        if raw_val is None and inputs:
+            raw_val = next(iter(inputs.values()))
+        if raw_val is None:
+            raw_val = context.get_variable("text", "")
         prefix = config.get("prefix", "")
         suffix = config.get("suffix", "")
         fmt = config.get("output_format", "markdown")

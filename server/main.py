@@ -5,7 +5,7 @@ Includes first-class Public Flow API triggers for external applications.
 """
 from fastapi import FastAPI, HTTPException, Request, Path
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import Dict, Any, List, Optional
@@ -430,6 +430,108 @@ async def get_session_stats_endpoint(session_id: str):
     Retrieves turn counts, estimated tokens, and message breakdown for a session.
     """
     return memory_store.get_session_stats(session_id)
+
+
+@app.get("/api/memory/sessions/{session_id}/export")
+async def export_session_memory(session_id: str, format: str = "json"):
+    """
+    Exports full conversation history for a given session.
+    Supported format: 'json' or 'markdown' / 'md'.
+    """
+    history = memory_store.get_history(session_id)
+    stats = memory_store.get_session_stats(session_id)
+
+    if format.lower() in ("markdown", "md"):
+        lines = [
+            f"# ZFlow Conversation Transcript - {session_id}",
+            f"- **Session ID:** `{session_id}`",
+            f"- **Total Turns:** {len(history)}",
+            f"- **User Turns:** {stats.get('user_turns', 0)}",
+            f"- **Assistant Turns:** {stats.get('assistant_turns', 0)}",
+            f"- **Exported At:** {time.strftime('%Y-%m-%d %H:%M:%S')}",
+            "",
+            "---",
+            ""
+        ]
+        for turn in history:
+            role_icon = "👤" if turn.get("role") == "user" else "🤖"
+            role_name = "User" if turn.get("role") == "user" else "Assistant"
+            timestamp_str = time.strftime('%H:%M:%S', time.localtime(turn.get("timestamp", time.time())))
+            lines.append(f"### {role_icon} {role_name} ({timestamp_str})")
+            lines.append(turn.get("content", ""))
+            lines.append("")
+        return PlainTextResponse("\n".join(lines), media_type="text/markdown")
+
+    return {
+        "session_id": session_id,
+        "exported_at": time.time(),
+        "stats": stats,
+        "history": history
+    }
+
+
+@app.get("/api/system/benchmark")
+async def run_system_benchmark():
+    """
+    Executes a high-speed micro-benchmark measuring:
+    1. SQLite memory insertion & retrieval latency (ms)
+    2. Workflow DAG topological resolution & engine runner overhead (ms)
+    3. Memory statistics
+    """
+    # 1. SQLite Memory latency
+    bench_session = f"bench_temp_{int(time.time() * 1000)}"
+    t_start_write = time.perf_counter()
+    for i in range(5):
+        memory_store.append_message(bench_session, "user", f"Bench query {i}")
+        memory_store.append_message(bench_session, "assistant", f"Bench answer {i}")
+    write_latency_ms = round(((time.perf_counter() - t_start_write) / 10) * 1000, 3)
+
+    t_start_read = time.perf_counter()
+    _ = memory_store.get_history(bench_session, limit=10)
+    read_latency_ms = round((time.perf_counter() - t_start_read) * 1000, 3)
+
+    # Clean up benchmark session
+    memory_store.clear_session(bench_session)
+
+    # 2. Pure Engine DAG Overhead
+    sample_flow = {
+        "id": "bench_flow",
+        "nodes": [
+            {"id": "node_input", "type": "input", "config": {}},
+            {"id": "node_prompt", "type": "prompt", "config": {"template": "Echo: {input}"}},
+            {"id": "node_output", "type": "output", "config": {"output_key": "reply"}}
+        ],
+        "edges": [
+            {"id": "e1", "source": "node_input", "target": "node_prompt"},
+            {"id": "e2", "source": "node_prompt", "target": "node_output"}
+        ]
+    }
+    t_start_dag = time.perf_counter()
+    graph = WorkflowGraph.from_dict(sample_flow)
+    runner = WorkflowRunner()
+    context = ExecutionContext(session_id="bench_ctx", initial_variables={"input": "ZFlow benchmark"})
+    _ = await runner.run(graph, context)
+    dag_overhead_ms = round((time.perf_counter() - t_start_dag) * 1000, 3)
+
+    sessions = memory_store.list_sessions()
+    total_turns = sum(s.get("turn_count", 0) for s in sessions)
+
+    return {
+        "status": "healthy",
+        "timestamp": time.time(),
+        "benchmarks": {
+            "sqlite_write_latency_per_turn_ms": write_latency_ms,
+            "sqlite_read_latency_ms": read_latency_ms,
+            "pure_dag_overhead_ms": dag_overhead_ms,
+            "engine_throughput_estimate_qps": round(1000.0 / max(dag_overhead_ms, 0.1), 1)
+        },
+        "storage": {
+            "total_saved_sessions": len(sessions),
+            "total_saved_turns": total_turns,
+            "database_file": os.path.basename(memory_store.db_path)
+        }
+    }
+
 
 
 @app.get("/api/v1/flows/{flow_id}/schema")

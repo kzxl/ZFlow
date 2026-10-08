@@ -93,7 +93,13 @@ class RouterNode(BaseNode):
     }
 
     async def execute(self, inputs: Dict[str, Any], config: Dict[str, Any], context: ExecutionContext) -> Dict[str, Any]:
-        text = str(inputs.get("input_text") or context.get_variable("user_query") or context.get_variable("input", ""))
+        text = str(
+            inputs.get("input_text")
+            or inputs.get("input")
+            or context.get_variable("prompt")
+            or context.get_variable("user_query")
+            or context.get_variable("input", "")
+        )
         mode = config.get("mode", "switch_case")
 
         # Resolve branches for switch_case mode
