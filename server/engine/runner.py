@@ -140,11 +140,16 @@ class WorkflowRunner:
                 for edge in outgoing_edges:
                     # If current node is a router, check handle matching
                     if node_type == "router":
-                        is_matched = collected_output.get("is_matched", False)
-                        if edge.source_handle == "true_branch" and not is_matched:
-                            continue # Skip false branch
-                        if edge.source_handle == "false_branch" and is_matched:
-                            continue # Skip true branch
+                        active_branch = collected_output.get("active_branch")
+                        if active_branch:
+                            if edge.source_handle and edge.source_handle != active_branch:
+                                continue # Skip non-matching branch
+                        else:
+                            is_matched = collected_output.get("is_matched", False)
+                            if edge.source_handle == "true_branch" and not is_matched:
+                                continue # Skip false branch
+                            if edge.source_handle == "false_branch" and is_matched:
+                                continue # Skip true branch
 
                     target_node = graph.get_node(edge.target)
                     if target_node and target_node not in ready_queue:

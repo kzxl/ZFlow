@@ -106,7 +106,29 @@ export const CustomFlowCard: React.FC<CustomFlowCardProps> = ({ id, type, data, 
   // Resolve inputs and outputs
   const fallback = DEFAULT_PORTS[type] || { inputs: [], outputs: [] };
   const inputs = metadata?.inputs && metadata.inputs.length > 0 ? metadata.inputs : fallback.inputs;
-  const outputs = metadata?.outputs && metadata.outputs.length > 0 ? metadata.outputs : fallback.outputs;
+  let outputs = metadata?.outputs && metadata.outputs.length > 0 ? metadata.outputs : fallback.outputs;
+
+  if (type === 'router' && data.config?.mode !== 'if_else') {
+    const branches = Array.isArray(data.config?.branches) && data.config.branches.length > 0
+      ? data.config.branches
+      : [
+          { id: 'branch_support', name: 'Support', label: 'Support' },
+          { id: 'branch_sales', name: 'Sales', label: 'Sales' }
+        ];
+
+    outputs = [
+      ...branches.map((b: any, idx: number) => ({
+        name: b.id || `branch_${idx + 1}`,
+        type: 'string',
+        label: b.label || b.name || `Case ${idx + 1}`
+      })),
+      {
+        name: 'default_branch',
+        type: 'string',
+        label: data.config?.default_label || 'Default / Else'
+      }
+    ];
+  }
 
   return (
     <div
@@ -258,9 +280,26 @@ export const CustomFlowCard: React.FC<CustomFlowCardProps> = ({ id, type, data, 
         )}
 
         {type === 'router' && (
-          <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 flex justify-between text-slate-400">
-            <span>Pattern:</span>
-            <span className="font-mono text-rose-300 truncate max-w-[140px]">{data.config?.target_pattern || 'none'}</span>
+          <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 space-y-1">
+            <div className="flex justify-between text-slate-400">
+              <span>Mode:</span>
+              <span className="font-mono text-indigo-300 font-semibold uppercase text-[10px]">
+                {data.config?.mode === 'if_else' ? 'If / Else' : 'Switch-Case'}
+              </span>
+            </div>
+            {data.config?.mode === 'if_else' ? (
+              <div className="flex justify-between text-slate-400">
+                <span>Pattern:</span>
+                <span className="font-mono text-rose-300 truncate max-w-[140px]">{data.config?.target_pattern || 'none'}</span>
+              </div>
+            ) : (
+              <div className="flex justify-between text-slate-400">
+                <span>Branches:</span>
+                <span className="font-mono text-emerald-300 font-semibold">
+                  {(data.config?.branches?.length || 2) + 1} Routes
+                </span>
+              </div>
+            )}
           </div>
         )}
 
