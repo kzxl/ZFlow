@@ -189,17 +189,17 @@ function FlowCanvas() {
   // Custom node types generator
   const nodeTypes = useMemo(() => {
     const typesMap: Record<string, React.ComponentType<any>> = {};
+    const knownTypes = ['input', 'prompt', 'llm', 'router', 'tool', 'memory', 'output', 'code', 'http', 'default'];
+    
+    knownTypes.forEach((t) => {
+      const meta = nodeDefs.find((d) => d.type === t);
+      typesMap[t] = (props: any) => <CustomFlowCard {...props} metadata={meta} />;
+    });
+
     nodeDefs.forEach((def) => {
       typesMap[def.type] = (props: any) => (
         <CustomFlowCard {...props} metadata={def} />
       );
-    });
-    // Fallback for default types
-    ['input', 'prompt', 'llm', 'router', 'tool', 'memory', 'output'].forEach((t) => {
-      if (!typesMap[t]) {
-        const meta = nodeDefs.find((d) => d.type === t);
-        typesMap[t] = (props: any) => <CustomFlowCard {...props} metadata={meta} />;
-      }
     });
     return typesMap;
   }, [nodeDefs]);

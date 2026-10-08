@@ -15,17 +15,17 @@ import {
   AlertCircle, 
   Loader2 
 } from 'lucide-react';
-import { CustomNodeData, NodeMetadata } from '../../types/workflow';
+import { CustomNodeData, NodeMetadata, PortDefinition } from '../../types/workflow';
 
 const CATEGORY_COLORS: Record<string, { bg: string; border: string; badge: string; text: string }> = {
-  input: { bg: 'bg-emerald-950/40', border: 'border-emerald-600/50', badge: 'bg-emerald-500/20 text-emerald-400', text: 'text-emerald-400' },
-  prompt: { bg: 'bg-amber-950/40', border: 'border-amber-600/50', badge: 'bg-amber-500/20 text-amber-400', text: 'text-amber-400' },
-  llm: { bg: 'bg-indigo-950/40', border: 'border-indigo-600/50', badge: 'bg-indigo-500/20 text-indigo-400', text: 'text-indigo-400' },
-  logic: { bg: 'bg-rose-950/40', border: 'border-rose-600/50', badge: 'bg-rose-500/20 text-rose-400', text: 'text-rose-400' },
-  tool: { bg: 'bg-blue-950/40', border: 'border-blue-600/50', badge: 'bg-blue-500/20 text-blue-400', text: 'text-blue-400' },
-  memory: { bg: 'bg-purple-950/40', border: 'border-purple-600/50', badge: 'bg-purple-500/20 text-purple-400', text: 'text-purple-400' },
-  output: { bg: 'bg-cyan-950/40', border: 'border-cyan-600/50', badge: 'bg-cyan-500/20 text-cyan-400', text: 'text-cyan-400' },
-  general: { bg: 'bg-slate-900/60', border: 'border-slate-700', badge: 'bg-slate-700/50 text-slate-300', text: 'text-slate-300' }
+  input: { bg: 'bg-emerald-950/50', border: 'border-emerald-600/40', badge: 'bg-emerald-500/20 text-emerald-400', text: 'text-emerald-400' },
+  prompt: { bg: 'bg-amber-950/50', border: 'border-amber-600/40', badge: 'bg-amber-500/20 text-amber-400', text: 'text-amber-400' },
+  llm: { bg: 'bg-indigo-950/50', border: 'border-indigo-600/40', badge: 'bg-indigo-500/20 text-indigo-400', text: 'text-indigo-400' },
+  logic: { bg: 'bg-rose-950/50', border: 'border-rose-600/40', badge: 'bg-rose-500/20 text-rose-400', text: 'text-rose-400' },
+  tool: { bg: 'bg-blue-950/50', border: 'border-blue-600/40', badge: 'bg-blue-500/20 text-blue-400', text: 'text-blue-400' },
+  memory: { bg: 'bg-purple-950/50', border: 'border-purple-600/40', badge: 'bg-purple-500/20 text-purple-400', text: 'text-purple-400' },
+  output: { bg: 'bg-cyan-950/50', border: 'border-cyan-600/40', badge: 'bg-cyan-500/20 text-cyan-400', text: 'text-cyan-400' },
+  general: { bg: 'bg-slate-900/60', border: 'border-slate-700/60', badge: 'bg-slate-700/50 text-slate-300', text: 'text-slate-300' }
 };
 
 const ICONS: Record<string, React.ElementType> = {
@@ -38,6 +38,52 @@ const ICONS: Record<string, React.ElementType> = {
   Send,
   Code2,
   Globe
+};
+
+// Fallback port definitions in case metadata is loading
+const DEFAULT_PORTS: Record<string, { inputs: PortDefinition[]; outputs: PortDefinition[] }> = {
+  input: {
+    inputs: [],
+    outputs: [
+      { name: 'query', type: 'string', label: 'User Query' },
+      { name: 'session_id', type: 'string', label: 'Session ID' }
+    ]
+  },
+  prompt: {
+    inputs: [{ name: 'input_text', type: 'string', label: 'Input Text' }],
+    outputs: [{ name: 'prompt', type: 'string', label: 'Prompt' }]
+  },
+  llm: {
+    inputs: [{ name: 'prompt', type: 'string', label: 'Prompt' }],
+    outputs: [{ name: 'text', type: 'string', label: 'Text' }]
+  },
+  router: {
+    inputs: [{ name: 'input_text', type: 'string', label: 'Input Text' }],
+    outputs: [
+      { name: 'true_branch', type: 'string', label: 'If True' },
+      { name: 'false_branch', type: 'string', label: 'If False' }
+    ]
+  },
+  tool: {
+    inputs: [{ name: 'input_arg', type: 'string', label: 'Argument' }],
+    outputs: [{ name: 'result', type: 'string', label: 'Result' }]
+  },
+  memory: {
+    inputs: [],
+    outputs: [{ name: 'chat_history', type: 'array', label: 'History' }]
+  },
+  code: {
+    inputs: [{ name: 'input_data', type: 'any', label: 'Input Data' }],
+    outputs: [{ name: 'result', type: 'any', label: 'Output Result' }]
+  },
+  http: {
+    inputs: [{ name: 'trigger_data', type: 'any', label: 'Trigger' }],
+    outputs: [{ name: 'response_body', type: 'any', label: 'Response' }]
+  },
+  output: {
+    inputs: [{ name: 'response_text', type: 'string', label: 'Response' }],
+    outputs: [{ name: 'final_output', type: 'string', label: 'Final Output' }]
+  }
 };
 
 interface CustomFlowCardProps {
@@ -55,27 +101,32 @@ export const CustomFlowCard: React.FC<CustomFlowCardProps> = ({ id, type, data, 
 
   const status = data.status || 'idle';
 
+  // Resolve inputs and outputs
+  const fallback = DEFAULT_PORTS[type] || { inputs: [], outputs: [] };
+  const inputs = metadata?.inputs && metadata.inputs.length > 0 ? metadata.inputs : fallback.inputs;
+  const outputs = metadata?.outputs && metadata.outputs.length > 0 ? metadata.outputs : fallback.outputs;
+
   return (
     <div
-      className={`min-w-[240px] max-w-[280px] rounded-xl border bg-[#0e121e]/90 backdrop-blur-md shadow-2xl transition-all duration-200 ${
-        selected ? 'ring-2 ring-indigo-500 shadow-indigo-500/20' : 'hover:border-slate-600'
+      className={`w-[270px] rounded-xl border bg-[#0d101a] backdrop-blur-md shadow-2xl transition-all duration-150 select-none ${
+        selected ? 'ring-2 ring-indigo-500 shadow-indigo-500/20' : 'hover:border-slate-600/80'
       } ${
-        status === 'running' ? 'border-amber-500/80 shadow-amber-500/20 ring-1 ring-amber-500' :
-        status === 'completed' ? 'border-emerald-500/80' :
-        status === 'error' ? 'border-rose-500/80 ring-1 ring-rose-500' : color.border
+        status === 'running' ? '!border-amber-500/90 shadow-amber-500/25 ring-1 ring-amber-500' :
+        status === 'completed' ? '!border-emerald-500/80' :
+        status === 'error' ? '!border-rose-500/90 ring-1 ring-rose-500' : color.border
       }`}
     >
       {/* Node Header */}
       <div className={`flex items-center justify-between px-3.5 py-2.5 rounded-t-xl border-b border-slate-800/80 ${color.bg}`}>
-        <div className="flex items-center gap-2">
-          <div className={`p-1.5 rounded-lg ${color.badge}`}>
+        <div className="flex items-center gap-2.5">
+          <div className={`p-1.5 rounded-lg shadow-sm ${color.badge}`}>
             <IconComponent size={15} />
           </div>
           <div>
-            <div className="text-xs font-semibold text-slate-100 tracking-wide">
+            <div className="text-xs font-semibold text-slate-100 tracking-wide leading-tight">
               {data.title || metadata?.name || type}
             </div>
-            <div className="text-[10px] text-slate-400 capitalize">{category} Node</div>
+            <div className="text-[10px] text-slate-400 capitalize font-mono mt-0.5">{category} node</div>
           </div>
         </div>
 
@@ -97,6 +148,45 @@ export const CustomFlowCard: React.FC<CustomFlowCardProps> = ({ id, type, data, 
         </div>
       </div>
 
+      {/* Ports Section: Left for inputs, Right for outputs */}
+      {(inputs.length > 0 || outputs.length > 0) && (
+        <div className="py-2 space-y-1.5 border-b border-slate-800/60 bg-[#090b12]/50">
+          {/* Input Ports */}
+          {inputs.map((inp) => (
+            <div key={inp.name} className="relative flex items-center h-6 px-3">
+              <Handle
+                type="target"
+                position={Position.Left}
+                id={inp.name}
+                className="!w-2.5 !h-2.5 !-left-[5px] !bg-indigo-400 !border-2 !border-[#0d101a] hover:!bg-indigo-300 transition-colors"
+              />
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-300 pl-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400/80"></span>
+                <span className="font-medium text-slate-200">{inp.label}</span>
+                <span className="text-[9px] text-slate-500 font-mono">({inp.type})</span>
+              </div>
+            </div>
+          ))}
+
+          {/* Output Ports */}
+          {outputs.map((out) => (
+            <div key={out.name} className="relative flex items-center justify-end h-6 px-3">
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-300 pr-1">
+                <span className="text-[9px] text-slate-500 font-mono">({out.type})</span>
+                <span className="font-medium text-slate-200">{out.label}</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80"></span>
+              </div>
+              <Handle
+                type="source"
+                position={Position.Right}
+                id={out.name}
+                className="!w-2.5 !h-2.5 !-right-[5px] !bg-emerald-400 !border-2 !border-[#0d101a] hover:!bg-emerald-300 transition-colors"
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Node Body / Options Summary */}
       <div className="p-3 text-[11px] text-slate-300 space-y-2">
         {type === 'llm' && (
@@ -109,11 +199,17 @@ export const CustomFlowCard: React.FC<CustomFlowCardProps> = ({ id, type, data, 
               <span>Temp:</span>
               <span className="font-mono text-slate-300">{data.config?.temperature ?? 0.7}</span>
             </div>
+            {data.config?.response_format === 'json_object' && (
+              <div className="flex justify-between text-amber-400 text-[10px]">
+                <span>Format:</span>
+                <span className="font-mono font-semibold">JSON Mode</span>
+              </div>
+            )}
           </div>
         )}
 
         {type === 'prompt' && (
-          <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 text-slate-400 line-clamp-2 italic">
+          <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 text-slate-400 line-clamp-2 italic text-[10px] leading-relaxed">
             "{data.config?.system_template || 'System Instructions...'}"
           </div>
         )}
@@ -121,7 +217,7 @@ export const CustomFlowCard: React.FC<CustomFlowCardProps> = ({ id, type, data, 
         {type === 'router' && (
           <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 flex justify-between text-slate-400">
             <span>Pattern:</span>
-            <span className="font-mono text-rose-300">{data.config?.target_pattern || 'none'}</span>
+            <span className="font-mono text-rose-300 truncate max-w-[140px]">{data.config?.target_pattern || 'none'}</span>
           </div>
         )}
 
@@ -132,15 +228,9 @@ export const CustomFlowCard: React.FC<CustomFlowCardProps> = ({ id, type, data, 
           </div>
         )}
 
-        {type === 'input' && (
-          <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 text-slate-400 line-clamp-2">
-            Default: <span className="text-emerald-300">"{data.config?.default_query || 'Xin chào!'}"</span>
-          </div>
-        )}
-
         {type === 'code' && (
-          <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 font-mono text-[10px] text-purple-300 line-clamp-2">
-            Python def main(inputs, ctx)...
+          <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 font-mono text-[10px] text-purple-300 truncate">
+            def main(inputs, context): ...
           </div>
         )}
 
@@ -154,53 +244,24 @@ export const CustomFlowCard: React.FC<CustomFlowCardProps> = ({ id, type, data, 
           </div>
         )}
 
+        {type === 'input' && (
+          <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 text-slate-400 line-clamp-2 text-[10px]">
+            Query: <span className="text-emerald-300 italic">"{data.config?.default_query || 'Xin chào!'}"</span>
+          </div>
+        )}
+
         {type === 'output' && (
-          <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 text-slate-400">
-            Field: <span className="font-mono text-cyan-300">"{data.config?.output_key || 'reply'}"</span>
+          <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 text-slate-400 flex justify-between">
+            <span>API Output Key:</span>
+            <span className="font-mono text-cyan-300 font-semibold">"{data.config?.output_key || 'reply'}"</span>
           </div>
         )}
 
         {data.executionTimeMs !== undefined && (
-          <div className="text-[10px] text-right text-slate-500 font-mono">
-            {data.executionTimeMs} ms
+          <div className="text-[10px] text-right text-slate-500 font-mono pt-1">
+            ⚡ {data.executionTimeMs} ms
           </div>
         )}
-      </div>
-
-      {/* Target Handles (Inputs) */}
-      <div className="absolute left-0 top-1/2 -translate-y-1/2 flex flex-col gap-3 -translate-x-[5px]">
-        {metadata?.inputs.map((inp, idx) => (
-          <div key={inp.name} className="relative group flex items-center">
-            <Handle
-              type="target"
-              position={Position.Left}
-              id={inp.name}
-              style={{ top: `${(idx + 1) * 25}px` }}
-              className="!w-2.5 !h-2.5 !bg-indigo-400 !border-2 !border-slate-950"
-            />
-            <span className="hidden group-hover:block absolute left-4 bg-slate-900 border border-slate-700 text-slate-200 text-[10px] px-1.5 py-0.5 rounded shadow z-50 whitespace-nowrap">
-              {inp.label} ({inp.type})
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* Source Handles (Outputs) */}
-      <div className="absolute right-0 top-1/2 -translate-y-1/2 flex flex-col gap-3 translate-x-[5px]">
-        {metadata?.outputs.map((out, idx) => (
-          <div key={out.name} className="relative group flex items-center">
-            <Handle
-              type="source"
-              position={Position.Right}
-              id={out.name}
-              style={{ top: `${(idx + 1) * 25}px` }}
-              className="!w-2.5 !h-2.5 !bg-emerald-400 !border-2 !border-slate-950"
-            />
-            <span className="hidden group-hover:block absolute right-4 bg-slate-900 border border-slate-700 text-slate-200 text-[10px] px-1.5 py-0.5 rounded shadow z-50 whitespace-nowrap">
-              {out.label} ({out.type})
-            </span>
-          </div>
-        ))}
       </div>
     </div>
   );
