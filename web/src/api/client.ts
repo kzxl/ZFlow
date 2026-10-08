@@ -9,7 +9,15 @@ export async function fetchNodeDefinitions(): Promise<NodeMetadata[]> {
   return data.nodes;
 }
 
-export async function listWorkflows(): Promise<{ id: string; name: string; description: string; node_count: number }[]> {
+export interface WorkflowSummary {
+  id: string;
+  name: string;
+  description: string;
+  node_count: number;
+  edge_count: number;
+}
+
+export async function listWorkflows(): Promise<WorkflowSummary[]> {
   const res = await fetch(`${BASE_URL}/api/workflows`);
   if (!res.ok) throw new Error(`Failed to list workflows: ${res.statusText}`);
   const data = await res.json();
@@ -17,18 +25,29 @@ export async function listWorkflows(): Promise<{ id: string; name: string; descr
 }
 
 export async function fetchWorkflow(id: string): Promise<WorkflowDefinition> {
-  const res = await fetch(`${BASE_URL}/api/workflows/${id}`);
+  const res = await fetch(`${BASE_URL}/api/workflows/${encodeURIComponent(id)}`);
   if (!res.ok) throw new Error(`Failed to fetch workflow: ${res.statusText}`);
   return await res.json();
 }
 
-export async function saveWorkflow(workflow: WorkflowDefinition): Promise<void> {
+export async function saveWorkflow(workflow: WorkflowDefinition): Promise<{ status: string; id: string; name: string }> {
   const res = await fetch(`${BASE_URL}/api/workflows`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(workflow)
   });
-  if (!res.ok) throw new Error(`Failed to save workflow: ${res.statusText}`);
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Failed to save workflow: ${errText || res.statusText}`);
+  }
+  return await res.json();
+}
+
+export async function deleteWorkflow(id: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/workflows/${encodeURIComponent(id)}`, {
+    method: 'DELETE'
+  });
+  if (!res.ok) throw new Error(`Failed to delete workflow: ${res.statusText}`);
 }
 
 export interface StreamCallbacks {

@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { 
   Play, 
   Save, 
@@ -10,13 +10,23 @@ import {
   CheckCircle, 
   Activity,
   Terminal,
-  Database
+  Database,
+  FolderOpen,
+  ChevronDown,
+  Check,
+  Plus
 } from 'lucide-react';
+import { WorkflowSummary } from '../api/client';
 
 interface HeaderProps {
   flowName: string;
   onFlowNameChange: (name: string) => void;
+  currentFlowId: string;
+  savedWorkflows?: WorkflowSummary[];
+  onSelectWorkflow?: (flowId: string) => void;
+  onNewWorkflow?: () => void;
   onSave: () => void;
+  onSaveAs?: () => void;
   onResetDefault: () => void;
   onLoadMemoryFlow?: () => void;
   onClear: () => void;
@@ -26,12 +36,18 @@ interface HeaderProps {
   isChatOpen: boolean;
   onToggleChat: () => void;
   isSaving?: boolean;
+  isSavedSuccess?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   flowName,
   onFlowNameChange,
+  currentFlowId,
+  savedWorkflows = [],
+  onSelectWorkflow,
+  onNewWorkflow,
   onSave,
+  onSaveAs,
   onResetDefault,
   onLoadMemoryFlow,
   onClear,
@@ -40,8 +56,10 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenApiModal,
   isChatOpen,
   onToggleChat,
-  isSaving
+  isSaving,
+  isSavedSuccess
 }) => {
+  const [isFlowDropdownOpen, setIsFlowDropdownOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -67,9 +85,66 @@ export const Header: React.FC<HeaderProps> = ({
           className="bg-transparent hover:bg-slate-900 focus:bg-slate-900 border border-transparent hover:border-slate-800 focus:border-indigo-500 rounded px-2 py-1 text-sm font-semibold text-slate-100 focus:outline-none transition-colors"
           title="Click to rename workflow"
         />
+
+        {/* Saved Workflows Selector */}
+        <div className="relative">
+          <button
+            onClick={() => setIsFlowDropdownOpen(!isFlowDropdownOpen)}
+            className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-900/90 hover:bg-slate-800 border border-slate-800 text-[11px] text-slate-300 font-mono transition-colors"
+            title="Danh sách workflow đã lưu"
+          >
+            <FolderOpen size={12} className="text-amber-400" />
+            <span className="max-w-[130px] truncate">#{currentFlowId}</span>
+            <ChevronDown size={11} className={`text-slate-400 transition-transform ${isFlowDropdownOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {isFlowDropdownOpen && (
+            <div className="absolute left-0 mt-1.5 w-64 bg-slate-950 border border-slate-800 rounded-xl shadow-2xl p-1.5 z-50 text-xs animate-in fade-in duration-100">
+              <div className="flex items-center justify-between px-2 py-1 border-b border-slate-800 text-[10px] text-slate-500 font-semibold uppercase">
+                <span>Workflow lưu trữ ({savedWorkflows.length})</span>
+                {onNewWorkflow && (
+                  <button
+                    onClick={() => {
+                      onNewWorkflow();
+                      setIsFlowDropdownOpen(false);
+                    }}
+                    className="text-indigo-400 hover:text-indigo-300 flex items-center gap-0.5"
+                  >
+                    <Plus size={10} /> Mới
+                  </button>
+                )}
+              </div>
+              <div className="max-h-56 overflow-y-auto mt-1 space-y-0.5">
+                {savedWorkflows.map((w) => (
+                  <div
+                    key={w.id}
+                    onClick={() => {
+                      onSelectWorkflow?.(w.id);
+                      setIsFlowDropdownOpen(false);
+                    }}
+                    className={`px-2.5 py-1.5 rounded-lg cursor-pointer flex items-center justify-between transition-colors ${
+                      w.id === currentFlowId
+                        ? 'bg-indigo-600/20 text-indigo-300 font-medium'
+                        : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                    }`}
+                  >
+                    <div className="overflow-hidden pr-2">
+                      <div className="truncate font-semibold">{w.name}</div>
+                      <div className="text-[10px] text-slate-500 font-mono truncate">#{w.id}</div>
+                    </div>
+                    <span className="text-[10px] text-slate-500 shrink-0 font-mono">
+                      {w.node_count} nodes
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px]">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-          FastAPI Engine Online
+          FastAPI Engine
         </div>
       </div>
 
@@ -130,14 +205,30 @@ export const Header: React.FC<HeaderProps> = ({
           className="hidden"
         />
 
+        {/* Save Actions */}
         <button
           onClick={onSave}
           disabled={isSaving}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg shadow-sm transition-colors"
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg shadow-sm transition-all ${
+            isSavedSuccess
+              ? 'bg-emerald-600 text-white shadow-emerald-600/30 ring-1 ring-emerald-400'
+              : 'text-white bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/30'
+          }`}
+          title="Lưu workflow hiện tại vào hệ thống"
         >
-          <Save size={13} />
-          <span>{isSaving ? 'Saving...' : 'Save Flow'}</span>
+          {isSavedSuccess ? <Check size={13} /> : <Save size={13} />}
+          <span>{isSaving ? 'Đang lưu...' : isSavedSuccess ? 'Đã lưu!' : 'Lưu Flow'}</span>
         </button>
+
+        {onSaveAs && (
+          <button
+            onClick={onSaveAs}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg transition-colors"
+            title="Lưu thành bản sao mới (Save As)"
+          >
+            <span>Lưu mới...</span>
+          </button>
+        )}
 
         <button
           onClick={onOpenApiModal}

@@ -24,7 +24,7 @@ import { ContextMenu } from './components/ContextMenu';
 import { CustomFlowCard } from './components/nodes/CustomFlowCard';
 
 import { NodeMetadata, WorkflowDefinition, CustomNodeData, ContextMenuState } from './types/workflow';
-import { fetchNodeDefinitions, fetchWorkflow, saveWorkflow } from './api/client';
+import { fetchNodeDefinitions, fetchWorkflow, saveWorkflow, listWorkflows, WorkflowSummary } from './api/client';
 
 const DEFAULT_FLOW_ID = 'starter_chatbot_flow';
 
@@ -32,10 +32,16 @@ function FlowCanvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<CustomNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [nodeDefs, setNodeDefs] = useState<NodeMetadata[]>([]);
+  const [currentFlowId, setCurrentFlowId] = useState<string>(
+    () => localStorage.getItem('zflow_active_flow_id') || DEFAULT_FLOW_ID
+  );
+  const [savedWorkflows, setSavedWorkflows] = useState<WorkflowSummary[]>([]);
   const [flowName, setFlowName] = useState('Standard Chatbot Flow');
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isApiModalOpen, setIsApiModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavedSuccess, setIsSavedSuccess] = useState(false);
+  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   // Context Menu state
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
@@ -132,25 +138,36 @@ function FlowCanvas() {
     };
   }, [handleOpenConfigModal, handleDuplicateNode, handleDeleteNode]);
 
+  const loadWorkflowList = useCallback(async () => {
+    try {
+      const list = await listWorkflows();
+      setSavedWorkflows(list);
+    } catch (e) {
+      console.error('Failed to list workflows:', e);
+    }
+  }, []);
+
   // Load node definitions & initial default workflow
   useEffect(() => {
     async function init() {
       try {
         const defs = await fetchNodeDefinitions();
         setNodeDefs(defs);
+        loadWorkflowList();
 
-        const flow = await fetchWorkflow(DEFAULT_FLOW_ID);
+        const flow = await fetchWorkflow(currentFlowId);
         if (flow) {
           setFlowName(flow.name || 'Standard Chatbot Flow');
           setNodes(flow.nodes.map(bindNode));
           setEdges(flow.edges || []);
+          setTimeout(() => reactFlowInstance.fitView({ padding: 0.2, duration: 400 }), 150);
         }
       } catch (err) {
         console.error('Failed to initialize ZFlow canvas:', err);
       }
     }
     init();
-  }, [bindNode]);
+  }, [bindNode, currentFlowId, loadWorkflowList, reactFlowInstance]);
 
   const handleSaveNodeConfig = useCallback((nodeId: string, newTitle: string, newConfig: Record<string, any>) => {
     setNodes((nds) =>
@@ -161,14 +178,15 @@ function FlowCanvas() {
             data: {
               ...node.data,
               title: newTitle,
-              config: newConfig
+              config: newConfig,
+              openConfigModal: () => handleOpenConfigModal(nodeId, newTitle, node.type || 'base', newConfig)
             }
           };
         }
         return node;
       })
     );
-  }, [setNodes]);
+  }, [handleOpenConfigModal, setNodes]);
 
   // Connect edges
   const onConnect = useCallback(
@@ -448,7 +466,7 @@ function FlowCanvas() {
   // Current workflow definition for live testing & export
   const currentWorkflow: WorkflowDefinition = useMemo(() => {
     return {
-      id: DEFAULT_FLOW_ID,
+      id: currentFlowId,
       name: flowName,
       nodes: nodes.map((n) => ({
         id: n.id,
@@ -468,43 +486,95 @@ function FlowCanvas() {
         targetHandle: e.targetHandle
       }))
     };
-  }, [nodes, edges, flowName]);
+  }, [nodes, edges, flowName, currentFlowId]);
 
   // Actions
-  const handleSave = async () => {
+  const handleSave = async (overrideId?: string, overrideName?: string) => {
     setIsSaving(true);
     try {
-      await saveWorkflow(currentWorkflow);
-      alert('Workflow saved successfully!');
+      const targetId = overrideId || currentFlowId || DEFAULT_FLOW_ID;
+      const targetName = overrideName || flowName || 'Custom Flow';
+      const payload: WorkflowDefinition = {
+        id: targetId,
+        name: targetName,
+        nodes: nodes.map((n) => ({
+          id: n.id,
+          type: n.type,
+          title: n.data?.title || n.type,
+          position: n.position,
+          data: {
+            title: n.data?.title,
+            config: n.data?.config
+          }
+        })),
+        edges: edges.map((e) => ({
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          sourceHandle: e.sourceHandle,
+          targetHandle: e.targetHandle
+        }))
+      };
+
+      const result = await saveWorkflow(payload);
+      setCurrentFlowId(result.id);
+      setFlowName(result.name);
+      localStorage.setItem('zflow_active_flow_id', result.id);
+      localStorage.setItem('zflow_cached_workflow', JSON.stringify(payload));
+      
+      setIsSavedSuccess(true);
+      setTimeout(() => setIsSavedSuccess(false), 2000);
+      setToastMessage({ text: `✓ Đã lưu workflow "${result.name}" (#${result.id}) thành công!`, type: 'success' });
+      setTimeout(() => setToastMessage(null), 3500);
+
+      loadWorkflowList();
     } catch (e: any) {
-      alert(`Save failed: ${e.message}`);
+      setToastMessage({ text: `Lỗi khi lưu workflow: ${e.message}`, type: 'error' });
+      setTimeout(() => setToastMessage(null), 4500);
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleResetDefault = async () => {
+  const handleSaveAs = () => {
+    const newName = prompt('Nhập tên workflow mới:', `${flowName} (Copy)`);
+    if (!newName || !newName.trim()) return;
+    const cleanId = newName.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || `flow_${Date.now().toString().slice(-4)}`;
+    handleSave(cleanId, newName.trim());
+  };
+
+  const handleSelectWorkflow = async (flowId: string) => {
     try {
-      const flow = await fetchWorkflow(DEFAULT_FLOW_ID);
-      setFlowName(flow.name || 'Standard Chatbot Flow');
+      const flow = await fetchWorkflow(flowId);
+      setCurrentFlowId(flow.id || flowId);
+      setFlowName(flow.name || flowId);
       setNodes(flow.nodes.map(bindNode));
       setEdges(flow.edges || []);
-      setTimeout(() => reactFlowInstance.fitView({ padding: 0.2, duration: 400 }), 100);
-    } catch (err) {
-      console.error(err);
+      localStorage.setItem('zflow_active_flow_id', flow.id || flowId);
+      setTimeout(() => reactFlowInstance.fitView({ padding: 0.2, duration: 400 }), 150);
+      setToastMessage({ text: `Đã nạp workflow: ${flow.name || flowId}`, type: 'success' });
+      setTimeout(() => setToastMessage(null), 2500);
+    } catch (err: any) {
+      setToastMessage({ text: `Lỗi nạp workflow: ${err.message}`, type: 'error' });
+      setTimeout(() => setToastMessage(null), 4000);
     }
   };
 
+  const handleNewWorkflow = () => {
+    const newId = `flow_${Date.now().toString().slice(-6)}`;
+    setCurrentFlowId(newId);
+    setFlowName('New Custom Workflow');
+    setNodes([]);
+    setEdges([]);
+    localStorage.setItem('zflow_active_flow_id', newId);
+  };
+
+  const handleResetDefault = async () => {
+    await handleSelectWorkflow(DEFAULT_FLOW_ID);
+  };
+
   const handleLoadMemoryFlow = async () => {
-    try {
-      const flow = await fetchWorkflow('conversational_memory_flow');
-      setFlowName(flow.name || 'Multi-Turn Memory Chatbot');
-      setNodes(flow.nodes.map(bindNode));
-      setEdges(flow.edges || []);
-      setTimeout(() => reactFlowInstance.fitView({ padding: 0.2, duration: 400 }), 100);
-    } catch (err) {
-      console.error(err);
-    }
+    await handleSelectWorkflow('conversational_memory_flow');
   };
 
   const handleClear = () => {
@@ -566,7 +636,12 @@ function FlowCanvas() {
       <Header
         flowName={flowName}
         onFlowNameChange={setFlowName}
-        onSave={handleSave}
+        currentFlowId={currentFlowId}
+        savedWorkflows={savedWorkflows}
+        onSelectWorkflow={handleSelectWorkflow}
+        onNewWorkflow={handleNewWorkflow}
+        onSave={() => handleSave()}
+        onSaveAs={handleSaveAs}
         onResetDefault={handleResetDefault}
         onLoadMemoryFlow={handleLoadMemoryFlow}
         onClear={handleClear}
@@ -576,6 +651,7 @@ function FlowCanvas() {
         isChatOpen={isChatOpen}
         onToggleChat={() => setIsChatOpen(!isChatOpen)}
         isSaving={isSaving}
+        isSavedSuccess={isSavedSuccess}
       />
 
       <div className="flex flex-1 relative overflow-hidden">
@@ -636,7 +712,7 @@ function FlowCanvas() {
       <ApiModal
         isOpen={isApiModalOpen}
         onClose={() => setIsApiModalOpen(false)}
-        flowId={DEFAULT_FLOW_ID}
+        flowId={currentFlowId}
         flowName={flowName}
       />
 
@@ -657,6 +733,19 @@ function FlowCanvas() {
         onPasteNode={handlePasteNode}
         hasClipboard={!!copiedNode}
       />
+
+      {/* Floating Toast Notification */}
+      {toastMessage && (
+        <div
+          className={`fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl shadow-2xl text-xs font-semibold border flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150 ${
+            toastMessage.type === 'success'
+              ? 'bg-[#0f1d1b] border-emerald-500/60 text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.2)]'
+              : 'bg-[#211116] border-rose-500/60 text-rose-300 shadow-[0_0_20px_rgba(244,63,94,0.2)]'
+          }`}
+        >
+          <span>{toastMessage.text}</span>
+        </div>
+      )}
     </div>
   );
 }
