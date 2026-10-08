@@ -138,8 +138,8 @@ class WorkflowRunner:
                 # Discover downstream nodes to queue
                 outgoing_edges = graph.get_outgoing_edges(node_id)
                 for edge in outgoing_edges:
-                    # If current node is a router, check handle matching
-                    if node_type in ("router", "llm_router"):
+                    # If current node is a router or branching node, check handle matching
+                    if node_type in ("router", "llm_router", "human_input"):
                         active_branch = collected_output.get("active_branch")
                         if active_branch:
                             if edge.source_handle and edge.source_handle != active_branch:

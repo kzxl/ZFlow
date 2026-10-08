@@ -9,6 +9,9 @@ from .output_node import OutputNode
 from .code_node import CodeNode
 from .http_node import HttpNode
 from .llm_router_node import LlmRouterNode
+from .rag_node import RagNode
+from .agent_node import AgentNode
+from .human_input_node import HumanInputNode
 
 __all__ = [
     "BaseNode",
@@ -23,5 +26,8 @@ __all__ = [
     "MemoryNode",
     "OutputNode",
     "CodeNode",
-    "HttpNode"
+    "HttpNode",
+    "RagNode",
+    "AgentNode",
+    "HumanInputNode"
 ]
