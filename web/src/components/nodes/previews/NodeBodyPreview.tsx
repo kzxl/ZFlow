@@ -112,6 +112,38 @@ export const NodeBodyPreview: React.FC<Props> = ({ type, data }) => {
         </div>
       );
 
+    case 'subflow':
+      return (
+        <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 flex flex-col gap-1 text-slate-400 text-[10px]">
+          <div className="flex justify-between items-center">
+            <span>Subflow ID:</span>
+            <span className="font-mono text-purple-300 font-semibold bg-purple-500/10 px-1.5 py-0.5 rounded border border-purple-500/20">
+              {data.config?.subflow_id || 'default_flow'}
+            </span>
+          </div>
+          <div className="flex justify-between text-slate-500">
+            <span>Inherit Ctx:</span>
+            <span className="font-mono text-slate-300">{data.config?.inherit_context !== false ? 'True' : 'False'}</span>
+          </div>
+        </div>
+      );
+
+    case 'webhook':
+      return (
+        <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 flex flex-col gap-1 text-slate-400 text-[10px]">
+          <div className="flex justify-between items-center">
+            <span>Hook ID:</span>
+            <span className="font-mono text-emerald-300 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+              {data.config?.hook_id || 'github_hook'}
+            </span>
+          </div>
+          <div className="flex justify-between text-slate-500">
+            <span>Endpoint:</span>
+            <span className="font-mono text-[9px] text-slate-400 truncate">/api/v1/webhook/...</span>
+          </div>
+        </div>
+      );
+
     default:
       return null;
   }

@@ -7,10 +7,15 @@ import time
 import re
 
 class ExecutionContext:
-    def __init__(self, session_id: str = "default_session", initial_variables: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        session_id: str = "default_session",
+        initial_variables: Optional[Dict[str, Any]] = None,
+        chat_history: Optional[List[Dict[str, str]]] = None
+    ):
         self.session_id: str = session_id
         self.variables: Dict[str, Any] = initial_variables.copy() if initial_variables else {}
-        self.chat_history: List[Dict[str, str]] = []
+        self.chat_history: List[Dict[str, str]] = chat_history.copy() if chat_history else []
         self.node_outputs: Dict[str, Dict[str, Any]] = {}
         self.node_states: Dict[str, str] = {} # idle, running, completed, error
         self.logs: List[Dict[str, Any]] = []

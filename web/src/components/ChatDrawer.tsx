@@ -25,7 +25,8 @@ import {
   FileJson,
   ExternalLink,
   Image as ImageIcon,
-  Wand2
+  Wand2,
+  Coins
 } from 'lucide-react';
 import { ChatMessage, WorkflowDefinition, ExecutionBenchmark } from '../types/workflow';
 import { 
@@ -484,17 +485,21 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
 
       onWorkflowComplete: (data) => {
         setIsStreaming(false);
-        const totalTimeMs = Math.round(performance.now() - startTime);
+        const totalTimeMs = data.benchmarks?.total_time_ms ?? Math.round(performance.now() - startTime);
         const ttftMs = firstTokenTime ? Math.round(firstTokenTime - startTime) : undefined;
         const durationSec = firstTokenTime ? (performance.now() - firstTokenTime) / 1000 : totalTimeMs / 1000;
-        const tokensPerSec = durationSec > 0 && tokenCount > 0 ? Number((tokenCount / durationSec).toFixed(1)) : undefined;
+        const calcTokens = data.benchmarks?.total_tokens ?? tokenCount;
+        const tokensPerSec = durationSec > 0 && calcTokens > 0 ? Number((calcTokens / durationSec).toFixed(1)) : undefined;
 
         const benchmark: ExecutionBenchmark = {
           ttftMs,
           totalTimeMs,
-          tokenCount,
+          tokenCount: calcTokens,
           tokensPerSec,
-          nodeLatencies: [...nodeLatencies]
+          estimatedCostUsd: data.benchmarks?.estimated_cost_usd,
+          estimatedCostVnd: data.benchmarks?.estimated_cost_vnd,
+          nodeLatencies: [...nodeLatencies],
+          nodes: data.benchmarks?.nodes || []
         };
 
         const finalContent = (data.final_output && !assistantContent) ? data.final_output : assistantContent;
@@ -747,11 +752,11 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                   </span>
                 )}
 
-                {/* Speed Benchmark Metric Badge on Assistant Replies */}
+                {/* Speed & Economics Benchmark Metric Badge on Assistant Replies */}
                 {!isUser && msg.benchmark && (
                   <div className="mt-2.5 pt-2 border-t border-slate-800/80 text-[11px] font-mono">
                     <div className="flex items-center justify-between flex-wrap gap-2 text-slate-400">
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex items-center flex-wrap gap-2.5">
                         {msg.benchmark.ttftMs !== undefined && (
                           <span className="flex items-center gap-1 text-amber-400" title="Time To First Token">
                             <Zap size={11} className="text-amber-400" />
@@ -770,38 +775,96 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                             {msg.benchmark.tokensPerSec} tok/s
                           </span>
                         )}
+                        {msg.benchmark.estimatedCostUsd !== undefined && msg.benchmark.estimatedCostUsd > 0 && (
+                          <span className="flex items-center gap-1 text-pink-400 font-semibold" title="Ước tính chi phí inference">
+                            <Coins size={11} className="text-pink-400" />
+                            ${msg.benchmark.estimatedCostUsd} (~{msg.benchmark.estimatedCostVnd}₫)
+                          </span>
+                        )}
                       </div>
 
-                      {msg.benchmark.nodeLatencies && msg.benchmark.nodeLatencies.length > 0 && (
+                      {((msg.benchmark.nodes && msg.benchmark.nodes.length > 0) || (msg.benchmark.nodeLatencies && msg.benchmark.nodeLatencies.length > 0)) && (
                         <button
                           onClick={() => setExpandedTraceMsgId(expandedTraceMsgId === msg.id ? null : msg.id)}
                           className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-indigo-300 transition-colors bg-slate-800/60 hover:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700/50"
-                          title="Xem chi tiết độ trễ từng node"
+                          title="Xem biểu đồ Waterfall và chi phí từng Node"
                         >
                           <BarChart2 size={10} />
-                          <span>{expandedTraceMsgId === msg.id ? 'Ẩn trace' : 'Trace nodes'}</span>
+                          <span>{expandedTraceMsgId === msg.id ? 'Thu gọn' : 'Waterfall'}</span>
                           <ChevronDown size={10} className={`transition-transform ${expandedTraceMsgId === msg.id ? 'rotate-180' : ''}`} />
                         </button>
                       )}
                     </div>
 
-                    {/* Expandable Waterfall Nodes Breakdown */}
-                    {expandedTraceMsgId === msg.id && msg.benchmark.nodeLatencies && (
-                      <div className="mt-2 p-2 bg-slate-950 border border-slate-800 rounded-lg space-y-1 animate-in fade-in duration-150">
-                        <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1 flex justify-between border-b border-slate-800/80 pb-1">
-                          <span>Node Execution Waterfall</span>
-                          <span>Latency (ms)</span>
+                    {/* Expandable Waterfall & Cost Inspector */}
+                    {expandedTraceMsgId === msg.id && (
+                      <div className="mt-2 p-2.5 bg-slate-950 border border-slate-800 rounded-lg space-y-1.5 animate-in fade-in duration-150">
+                        <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex justify-between border-b border-slate-800/80 pb-1">
+                          <span>Node Waterfall Timeline</span>
+                          <span className="text-[9px] text-slate-500 font-mono">Offset → Duration (ms)</span>
                         </div>
-                        {msg.benchmark.nodeLatencies.map((nl, idx) => (
-                          <div key={nl.nodeId + idx} className="flex items-center justify-between text-[10px] py-0.5 border-b border-slate-900/80 last:border-none">
-                            <div className="flex items-center gap-1.5 truncate max-w-[200px]">
-                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0"></span>
-                              <span className="text-slate-300 font-mono truncate">{nl.nodeId}</span>
-                              {nl.type && <span className="text-slate-500 text-[9px]">({nl.type})</span>}
+
+                        {/* If detailed nodes benchmark from backend is present */}
+                        {msg.benchmark.nodes && msg.benchmark.nodes.length > 0 ? (
+                          <div className="space-y-1.5 pt-1">
+                            {msg.benchmark.nodes.map((nb, idx) => {
+                              const totalMs = Math.max(1, msg.benchmark?.totalTimeMs || 100);
+                              const offsetPct = Math.min(95, Math.max(0, ((nb.start_offset_ms || 0) / totalMs) * 100));
+                              const widthPct = Math.min(100 - offsetPct, Math.max(4, ((nb.duration_ms || 1) / totalMs) * 100));
+                              const isErr = nb.status === 'error';
+
+                              return (
+                                <div key={nb.node_id + idx} className="text-[10px] py-1 border-b border-slate-900/80 last:border-none flex flex-col gap-1">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-1.5 truncate max-w-[210px]">
+                                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isErr ? 'bg-rose-500' : 'bg-emerald-400'}`} />
+                                      <span className="text-slate-200 font-mono truncate">{nb.title || nb.node_id}</span>
+                                      {nb.type && <span className="text-slate-500 text-[9px]">({nb.type})</span>}
+                                    </div>
+                                    <div className="flex items-center gap-2 font-mono shrink-0 text-[10px]">
+                                      {nb.tokens ? <span className="text-slate-400">{nb.tokens} tok</span> : null}
+                                      {nb.cost_usd ? <span className="text-pink-300">${nb.cost_usd}</span> : null}
+                                      <span className="font-semibold text-amber-300">{nb.duration_ms}ms</span>
+                                    </div>
+                                  </div>
+
+                                  {/* Gantt Bar Visualizer */}
+                                  <div className="w-full bg-slate-900/90 rounded-full h-1.5 overflow-hidden relative border border-slate-800/40">
+                                    <div
+                                      style={{ left: `${offsetPct}%`, width: `${widthPct}%` }}
+                                      className={`absolute top-0 bottom-0 rounded-full transition-all duration-300 ${
+                                        isErr
+                                          ? 'bg-rose-500'
+                                          : nb.type === 'llm' || nb.type === 'agent'
+                                          ? 'bg-gradient-to-r from-indigo-500 to-purple-400'
+                                          : nb.type === 'router' || nb.type === 'system1_reflex'
+                                          ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                                          : 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                                      }`}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })}
+
+                            <div className="pt-1.5 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                              <span>Tokens: <strong className="text-slate-200">{msg.benchmark.tokenCount || 0}</strong></span>
+                              <span>Ước tính: <strong className="text-pink-300">${msg.benchmark.estimatedCostUsd || 0}</strong> (~{msg.benchmark.estimatedCostVnd || 0}₫)</span>
                             </div>
-                            <span className="font-semibold text-amber-300 font-mono shrink-0">{nl.durationMs}ms</span>
                           </div>
-                        ))}
+                        ) : msg.benchmark.nodeLatencies ? (
+                          /* Fallback to simple node latencies */
+                          msg.benchmark.nodeLatencies.map((nl, idx) => (
+                            <div key={nl.nodeId + idx} className="flex items-center justify-between text-[10px] py-0.5 border-b border-slate-900/80 last:border-none">
+                              <div className="flex items-center gap-1.5 truncate max-w-[200px]">
+                                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                                <span className="text-slate-300 font-mono truncate">{nl.nodeId}</span>
+                                {nl.type && <span className="text-slate-500 text-[9px]">({nl.type})</span>}
+                              </div>
+                              <span className="font-semibold text-amber-300 font-mono shrink-0">{nl.durationMs}ms</span>
+                            </div>
+                          ))
+                        ) : null}
                       </div>
                     )}
                   </div>

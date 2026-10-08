@@ -24,7 +24,9 @@ import {
   PanelLeftOpen,
   HelpCircle,
   Cpu,
-  Zap
+  Zap,
+  Webhook,
+  Workflow
 } from 'lucide-react';
 import { NodeMetadata, NodeCategory } from '../types/workflow';
 
@@ -45,7 +47,9 @@ const ICONS: Record<string, React.ElementType> = {
   Send,
   Code2,
   Globe,
-  Zap
+  Zap,
+  Webhook,
+  Workflow
 };
 
 const CATEGORY_COLORS: Record<string, { badge: string; text: string; dot: string }> = {

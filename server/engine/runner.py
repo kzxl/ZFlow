@@ -10,22 +10,50 @@ from engine.graph import WorkflowGraph, NodeDef, EdgeDef
 from engine.context import ExecutionContext
 from nodes.base import NodeRegistry, BaseNode
 
+def estimate_token_cost(model_name: str, tokens: int) -> float:
+    """
+    Estimates token cost in USD based on standard blended provider pricing.
+    """
+    if not tokens or tokens <= 0:
+        return 0.0
+    m = (model_name or "").lower()
+    if "simulator" in m:
+        return 0.0
+    if "gpt-4o-mini" in m:
+        return (tokens / 1_000_000.0) * 0.35 # ~$0.35 blended per 1M
+    elif "gpt-4o" in m:
+        return (tokens / 1_000_000.0) * 5.00 # ~$5.00 blended per 1M
+    elif "claude-3-5" in m:
+        return (tokens / 1_000_000.0) * 6.00 # ~$6.00 blended per 1M
+    elif "deepseek" in m:
+        return (tokens / 1_000_000.0) * 0.20 # ~$0.20 blended per 1M
+    elif "llama" in m or "qwen" in m:
+        return 0.0 # Local open-source inference
+    return (tokens / 1_000_000.0) * 0.50 # Generic fallback rate
+
+
 class WorkflowRunner:
     def __init__(self, max_steps: int = 50):
         self.max_steps = max_steps
 
     async def run(self, graph: WorkflowGraph, context: ExecutionContext) -> Dict[str, Any]:
         """
-        Executes the workflow graph in batch mode and returns the final execution context state.
+        Executes the workflow graph in batch mode and returns the final execution context state
+        along with waterfall benchmarks and cost metrics.
         """
-        async for _ in self.run_stream(graph, context):
-            pass
+        benchmarks_summary: Dict[str, Any] = {}
+        async for sse_event in self.run_stream(graph, context):
+            if sse_event.get("event") == "workflow_complete":
+                benchmarks_summary = sse_event.get("data", {}).get("benchmarks", {})
+
+        total_time_ms = round((time.time() - context.start_time) * 1000, 2)
         return {
             "session_id": context.session_id,
             "final_output": context.get_variable("final_output"),
             "node_outputs": context.node_outputs,
             "logs": context.logs,
-            "total_time_ms": round((time.time() - context.start_time) * 1000, 2)
+            "total_time_ms": total_time_ms,
+            "benchmarks": benchmarks_summary
         }
 
     async def run_stream(
@@ -38,7 +66,7 @@ class WorkflowRunner:
         - token: streaming LLM token chunks
         - node_complete: node execution finished
         - node_error: error details
-        - workflow_complete: whole execution summary
+        - workflow_complete: whole execution summary with waterfall timeline and cost metrics
         """
         yield {"event": "status", "data": {"status": "started", "session_id": context.session_id}}
 
@@ -51,6 +79,7 @@ class WorkflowRunner:
         ready_queue: deque[NodeDef] = deque(entry_nodes)
         executed_nodes: Set[str] = set()
         step_count = 0
+        node_benchmarks: List[Dict[str, Any]] = []
 
         while ready_queue and step_count < self.max_steps:
             current_node = ready_queue.popleft()
@@ -98,18 +127,22 @@ class WorkflowRunner:
             }
 
             node_start_time = time.time()
+            start_offset_ms = round((node_start_time - context.start_time) * 1000, 2)
             collected_output: Dict[str, Any] = {}
+            streamed_tokens = 0
 
             try:
                 # Stream or execute node
                 async for chunk in node_instance.execute_stream(inputs, current_node.config, context):
                     chunk_type = chunk.get("type")
                     if chunk_type == "token":
+                        token_text = chunk.get("token", "")
+                        streamed_tokens += max(1, len(token_text.split()))
                         yield {
                             "event": "token",
                             "data": {
                                 "node_id": node_id,
-                                "token": chunk.get("token", "")
+                                "token": token_text
                             }
                         }
                     elif chunk_type == "result":
@@ -122,6 +155,30 @@ class WorkflowRunner:
                 # Record node output in context
                 context.record_node_output(node_id, collected_output)
                 duration_ms = round((time.time() - node_start_time) * 1000, 2)
+
+                # Extract or compute token metrics and cost
+                explicit_tokens = 0
+                if isinstance(collected_output, dict):
+                    usage = collected_output.get("usage")
+                    if isinstance(usage, dict) and "total_tokens" in usage:
+                        explicit_tokens = int(usage["total_tokens"])
+                
+                node_tokens = explicit_tokens if explicit_tokens > 0 else streamed_tokens
+                provider = current_node.config.get("provider", "")
+                model_name = "simulator" if provider == "simulator" else current_node.config.get("model", "")
+                node_cost_usd = estimate_token_cost(model_name, node_tokens) if node_type in ("llm", "agent", "llm_router") else 0.0
+
+                node_benchmarks.append({
+                    "node_id": node_id,
+                    "title": current_node.title or node_type,
+                    "type": node_type,
+                    "step": step_count,
+                    "start_offset_ms": start_offset_ms,
+                    "duration_ms": duration_ms,
+                    "tokens": node_tokens,
+                    "cost_usd": round(node_cost_usd, 6),
+                    "status": "success"
+                })
 
                 yield {
                     "event": "node_complete",
@@ -158,6 +215,19 @@ class WorkflowRunner:
             except Exception as e:
                 err_msg = str(e)
                 context.log("error", f"Error in node '{node_id}': {err_msg}", node_id)
+                duration_ms = round((time.time() - node_start_time) * 1000, 2)
+                node_benchmarks.append({
+                    "node_id": node_id,
+                    "title": current_node.title or node_type,
+                    "type": node_type,
+                    "step": step_count,
+                    "start_offset_ms": start_offset_ms,
+                    "duration_ms": duration_ms,
+                    "tokens": 0,
+                    "cost_usd": 0.0,
+                    "status": "error",
+                    "error": err_msg
+                })
                 yield {
                     "event": "node_error",
                     "data": {
@@ -167,12 +237,25 @@ class WorkflowRunner:
                 }
 
         total_time_ms = round((time.time() - context.start_time) * 1000, 2)
+        total_tokens = sum(b.get("tokens", 0) for b in node_benchmarks)
+        total_cost_usd = sum(b.get("cost_usd", 0.0) for b in node_benchmarks)
+        total_cost_vnd = round(total_cost_usd * 25400, 2)
+
+        benchmarks_summary = {
+            "total_time_ms": total_time_ms,
+            "total_tokens": total_tokens,
+            "estimated_cost_usd": round(total_cost_usd, 6),
+            "estimated_cost_vnd": total_cost_vnd,
+            "nodes": node_benchmarks
+        }
+
         yield {
             "event": "workflow_complete",
             "data": {
                 "session_id": context.session_id,
                 "final_output": context.get_variable("final_output"),
                 "total_time_ms": total_time_ms,
-                "executed_count": len(executed_nodes)
+                "executed_count": len(executed_nodes),
+                "benchmarks": benchmarks_summary
             }
         }

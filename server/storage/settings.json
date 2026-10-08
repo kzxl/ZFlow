@@ -1,0 +1,17 @@
+{
+  "openai_api_key": "",
+  "gemini_api_key": "",
+  "deepseek_api_key": "",
+  "claude_api_key": "",
+  "groq_api_key": "",
+  "ollama_base_url": "http://localhost:11434",
+  "comfyui_base_url": "http://127.0.0.1:8188",
+  "vllm_base_url": "http://localhost:8000/v1",
+  "default_model": "gpt-4o-mini",
+  "default_temperature": 0.5,
+  "active_flow_id": "intelligent_enterprise_chatbot_flow",
+  "enable_semantic_cache": true,
+  "cache_ttl_seconds": 86400,
+  "memory_window_size": 8,
+  "rag_top_k": 3
+}

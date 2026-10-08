@@ -55,7 +55,7 @@ export interface StreamCallbacks {
   onToken?: (data: { node_id: string; token: string }) => void;
   onNodeComplete?: (data: { node_id: string; type: string; output: any; duration_ms: number }) => void;
   onNodeError?: (data: { node_id: string; error: string }) => void;
-  onWorkflowComplete?: (data: { session_id: string; final_output: string; total_time_ms: number }) => void;
+  onWorkflowComplete?: (data: { session_id: string; final_output: string; total_time_ms: number; benchmarks?: any }) => void;
   onError?: (err: any) => void;
 }
 

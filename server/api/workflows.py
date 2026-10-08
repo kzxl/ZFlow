@@ -85,23 +85,29 @@ async def get_workflow(workflow_id: str):
     return load_flow_data(workflow_id)
 
 
-@router.post("/api/workflows")
-async def save_workflow(payload: WorkflowPayload):
-    """Saves or updates a workflow JSON definition."""
-    raw_id = payload.id or payload.name or "custom_flow"
+def save_flow_data(flow_id: str, data: Dict[str, Any]) -> str:
+    """Helper to persist a workflow definition JSON to local storage."""
+    raw_id = flow_id or data.get("id") or data.get("name") or "custom_flow"
     wf_id = re.sub(r'[^a-zA-Z0-9_-]', '_', raw_id.strip()).lower()
     wf_id = re.sub(r'_+', '_', wf_id).strip('_') or "custom_flow"
 
-    data = payload.model_dump()
-    data["id"] = wf_id
-    if not data.get("name"):
-        data["name"] = wf_id.replace("_", " ").title()
+    save_obj = dict(data)
+    save_obj["id"] = wf_id
+    if not save_obj.get("name"):
+        save_obj["name"] = wf_id.replace("_", " ").title()
 
     target = os.path.join(STORAGE_DIR, f"{wf_id}.json")
     with open(target, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+        json.dump(save_obj, f, indent=2, ensure_ascii=False)
+    return wf_id
 
-    return {"status": "saved", "id": wf_id, "name": data.get("name")}
+
+@router.post("/api/workflows")
+async def save_workflow(payload: WorkflowPayload):
+    """Saves or updates a workflow JSON definition."""
+    data = payload.model_dump()
+    wf_id = save_flow_data(payload.id or payload.name or "custom_flow", data)
+    return {"status": "saved", "id": wf_id, "name": data.get("name", wf_id)}
 
 
 @router.delete("/api/workflows/{workflow_id}")

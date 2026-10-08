@@ -106,6 +106,16 @@ class LlmNode(BaseNode):
             "label": "Stop Sequences (comma-separated)",
             "default": ""
         },
+        "enable_fallback": {
+            "type": "boolean",
+            "label": "Enable Model Failover",
+            "default": True
+        },
+        "fallback_models": {
+            "type": "string",
+            "label": "Fallback Models (Priority ordered, comma-separated)",
+            "default": "gpt-4o-mini, deepseek-chat, simulator"
+        },
         "api_base": {
             "type": "string",
             "label": "API Base URL",
@@ -156,25 +166,37 @@ class LlmNode(BaseNode):
                 yield chunk
             return
 
-        # Real API streaming (OpenAI / Ollama / vLLM)
+        # Build list of candidate models for failover
+        selected_model = config.get("model", "gpt-4o-mini")
+        primary_model = config.get("custom_model") if selected_model == "custom" and config.get("custom_model") else selected_model
+        
+        enable_fallback = config.get("enable_fallback", True)
+        fallback_models_str = config.get("fallback_models", "gpt-4o-mini, deepseek-chat, simulator")
+        
+        candidate_models = [primary_model]
+        if enable_fallback and fallback_models_str:
+            parsed_fallbacks = [m.strip() for m in str(fallback_models_str).split(",") if m.strip()]
+            for fb in parsed_fallbacks:
+                if fb not in candidate_models:
+                    candidate_models.append(fb)
+
+        # Real API streaming with failover
         default_base = settings_manager.get("ollama_base_url") if provider == "ollama" else "https://api.openai.com/v1"
         api_base = (config.get("api_base") or default_base).rstrip("/")
-        
-        selected_model = config.get("model", "gpt-4o-mini")
-        model = config.get("custom_model") if selected_model == "custom" and config.get("custom_model") else selected_model
-        
+        if provider == "ollama" and "/v1" not in api_base:
+            api_base = f"{api_base}/v1"
+
         temperature = float(config.get("temperature", 0.7))
         top_p = float(config.get("top_p", 1.0))
         max_tokens = int(config.get("max_tokens", 2048))
         presence_penalty = float(config.get("presence_penalty", 0.0))
         frequency_penalty = float(config.get("frequency_penalty", 0.0))
         timeout_sec = float(config.get("timeout_seconds", 60.0))
-
-        if provider == "ollama" and "/v1" not in api_base:
-            api_base = f"{api_base}/v1"
+        if api_key and any(m in api_key.lower() for m in ["test", "mock", "dummy", "demo"]):
+            timeout_sec = min(timeout_sec, 2.0)
 
         messages = [{"role": "system", "content": system_prompt}]
-        for turn in history[-8:]: # Keep last 8 turns
+        for turn in history[-8:]:  # Keep last 8 turns
             messages.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
         messages.append({"role": "user", "content": prompt})
 
@@ -182,53 +204,85 @@ class LlmNode(BaseNode):
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}" if api_key else ""
         }
-        
-        payload: Dict[str, Any] = {
-            "model": model,
-            "messages": messages,
-            "temperature": temperature,
-            "top_p": top_p,
-            "max_tokens": max_tokens,
-            "presence_penalty": presence_penalty,
-            "frequency_penalty": frequency_penalty,
-            "stream": True
-        }
-
-        # Handle response_format
-        if config.get("response_format") == "json_object":
-            payload["response_format"] = {"type": "json_object"}
 
         # Handle stop sequences
+        stop_seqs = None
         stops = config.get("stop_sequences", "")
         if stops and isinstance(stops, str):
-            seqs = [s.strip() for s in stops.split(",") if s.strip()]
-            if seqs:
-                payload["stop"] = seqs
+            parsed_stops = [s.strip() for s in stops.split(",") if s.strip()]
+            if parsed_stops:
+                stop_seqs = parsed_stops
 
-        try:
-            async with httpx.AsyncClient(timeout=timeout_sec) as client:
-                async with client.stream("POST", f"{api_base}/chat/completions", headers=headers, json=payload) as response:
-                    if response.status_code != 200:
-                        err_text = await response.aread()
-                        yield {"type": "token", "token": f"[API Error {response.status_code}: {err_text.decode('utf-8')}]"}
-                        return
+        last_error = ""
+        for idx, current_model in enumerate(candidate_models):
+            # Check if this candidate is the simulator fallback
+            if current_model == "simulator":
+                if idx > 0:
+                    yield {"type": "token", "token": f"\n\n*(Failover: Đã tự động kích hoạt simulator dự phòng do model trước gặp sự cố)*\n\n"}
+                async for chunk in self._stream_simulator(prompt, system_prompt, config):
+                    yield chunk
+                return
 
-                    async for line in response.aiter_lines():
-                        if not line or not line.startswith("data: "):
-                            continue
-                        line_data = line[6:].strip()
-                        if line_data == "[DONE]":
-                            break
-                        try:
-                            delta_json = json.loads(line_data)
-                            delta = delta_json.get("choices", [{}])[0].get("delta", {})
-                            token = delta.get("content")
-                            if token:
-                                yield {"type": "token", "token": token}
-                        except Exception:
-                            continue
-        except Exception as e:
-            yield {"type": "token", "token": f"[LlmNode Connection Error: {str(e)}]"}
+            payload: Dict[str, Any] = {
+                "model": current_model,
+                "messages": messages,
+                "temperature": temperature,
+                "top_p": top_p,
+                "max_tokens": max_tokens,
+                "presence_penalty": presence_penalty,
+                "frequency_penalty": frequency_penalty,
+                "stream": True
+            }
+            if config.get("response_format") == "json_object":
+                payload["response_format"] = {"type": "json_object"}
+            if stop_seqs:
+                payload["stop"] = stop_seqs
+
+            try:
+                has_yielded_token = False
+                async with httpx.AsyncClient(timeout=timeout_sec) as client:
+                    async with client.stream("POST", f"{api_base}/chat/completions", headers=headers, json=payload) as response:
+                        if response.status_code != 200:
+                            err_bytes = await response.aread()
+                            err_msg = f"HTTP {response.status_code}: {err_bytes.decode('utf-8', errors='ignore')}"
+                            raise httpx.HTTPStatusError(err_msg, request=response.request, response=response)
+
+                        async for line in response.aiter_lines():
+                            if not line or not line.startswith("data: "):
+                                continue
+                            line_data = line[6:].strip()
+                            if line_data == "[DONE]":
+                                break
+                            try:
+                                delta_json = json.loads(line_data)
+                                delta = delta_json.get("choices", [{}])[0].get("delta", {})
+                                token = delta.get("content")
+                                if token:
+                                    has_yielded_token = True
+                                    yield {"type": "token", "token": token}
+                            except Exception:
+                                continue
+
+                # If reached here and streamed tokens successfully, complete stream
+                if has_yielded_token:
+                    return
+
+            except Exception as exc:
+                last_error = str(exc)
+                context.log("warning", f"Model '{current_model}' encountered error: {last_error}. Checking failover options...")
+                # If there is another model available, notify user and loop to next candidate
+                if idx < len(candidate_models) - 1:
+                    next_model = candidate_models[idx + 1]
+                    yield {
+                        "type": "token",
+                        "token": f"\n\n*[⚠️ Failover Alert: Model '{current_model}' gián đoạn ({last_error[:60]}...). Đang tự động chuyển sang '{next_model}'...]*\n\n"
+                    }
+                    continue
+                else:
+                    break
+
+        # If all candidates failed, output final error
+        yield {"type": "token", "token": f"[LlmNode Failover Error: All models failed. Last error: {last_error}]"}
 
     async def _stream_simulator(self, prompt: str, system_prompt: str, config: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
         selected_model = config.get("model", "gpt-4o-mini")

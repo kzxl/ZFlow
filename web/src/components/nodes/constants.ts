@@ -172,5 +172,25 @@ export const DEFAULT_PORTS: Record<string, { inputs: PortDefinition[]; outputs: 
       { name: 'approved', type: 'string', label: 'Approved Path' },
       { name: 'rejected', type: 'string', label: 'Rejected Path' }
     ]
+  },
+  subflow: {
+    inputs: [
+      { name: 'input', type: 'string', label: 'Query / Payload' },
+      { name: 'variables', type: 'object', label: 'Injected Vars (Opt)' }
+    ],
+    outputs: [
+      { name: 'output', type: 'string', label: 'Primary Output' },
+      { name: 'reply', type: 'string', label: 'Assistant Reply' },
+      { name: 'all_outputs', type: 'object', label: 'Subflow Vars' }
+    ]
+  },
+  webhook: {
+    inputs: [],
+    outputs: [
+      { name: 'payload', type: 'object', label: 'Webhook Body' },
+      { name: 'headers', type: 'object', label: 'HTTP Headers' },
+      { name: 'event', type: 'string', label: 'Event Name' },
+      { name: 'query', type: 'string', label: 'Normalized Query' }
+    ]
   }
 };

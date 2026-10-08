@@ -17,6 +17,8 @@ from .image_gen_node import ImageGenNode
 from .system1_reflex_node import System1ReflexNode
 from .permission_guard_node import PermissionGuardNode
 from .semantic_cache_node import SemanticCacheNode
+from .subflow_node import SubflowNode
+from .webhook_node import WebhookTriggerNode
 
 __all__ = [
     "BaseNode",
@@ -40,5 +42,7 @@ __all__ = [
     "VisionNode",
     "System1ReflexNode",
     "PermissionGuardNode",
-    "SemanticCacheNode"
+    "SemanticCacheNode",
+    "SubflowNode",
+    "WebhookTriggerNode"
 ]

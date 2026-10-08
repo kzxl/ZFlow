@@ -3,7 +3,7 @@ Public Flow API Router.
 Enables external applications, Discord/Telegram bots, and webhooks to trigger workflows by Flow ID
 or via the special 'active' alias (targeting the currently designated active workflow).
 """
-from fastapi import APIRouter, Path
+from fastapi import APIRouter, Path, Request, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional
@@ -237,3 +237,94 @@ async def get_flow_io_schema(
         "inputs": inputs_schema,
         "outputs": outputs_schema
     }
+
+
+@router.post("/api/v1/webhook/{hook_id}")
+async def handle_incoming_webhook(
+    hook_id: str = Path(..., description="Unique Webhook identifier configured on the WebhookTriggerNode"),
+    flow_id: Optional[str] = Query(None, description="Optional target workflow ID or 'active'"),
+    request: Request = None
+):
+    """
+    Event-driven Webhook receiver:
+    Accepts external webhook payloads (GitHub, Stripe, custom events) and triggers the corresponding workflow.
+    Validates secret tokens if configured on the WebhookTriggerNode.
+    """
+    # 1. Parse JSON payload or fallback to raw bytes text
+    payload: Dict[str, Any] = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        raw_body = await request.body()
+        if raw_body:
+            try:
+                payload = json.loads(raw_body.decode("utf-8"))
+            except Exception:
+                payload = {"raw_text": raw_body.decode("utf-8", errors="ignore")}
+
+    headers_dict = dict(request.headers)
+    incoming_secret = (
+        headers_dict.get("x-webhook-secret") 
+        or headers_dict.get("authorization", "").replace("Bearer ", "").strip()
+        or request.query_params.get("secret", "")
+    )
+
+    # 2. Determine target workflow
+    target_flow_id = flow_id or "active"
+    resolved_id, flow_data = resolve_target_flow(target_flow_id)
+    graph = WorkflowGraph.from_dict(flow_data)
+
+    # 3. Check for WebhookTriggerNode and validate secret token if configured
+    webhook_node_found = False
+    for node in graph.nodes.values():
+        if node.type == "webhook":
+            cfg = node.config or {}
+            cfg_hook_id = str(cfg.get("hook_id", "")).strip()
+            # If node config specifies hook_id, verify match
+            if cfg_hook_id and cfg_hook_id != hook_id:
+                continue
+
+            webhook_node_found = True
+            expected_secret = str(cfg.get("secret_token", "")).strip()
+            if expected_secret and incoming_secret != expected_secret:
+                raise HTTPException(status_code=401, detail="Invalid webhook secret token.")
+
+    session_id = f"hook_{hook_id}_{uuid.uuid4().hex[:8]}"
+
+    # 4. Extract query message from payload
+    extracted_query = ""
+    for candidate_key in ["message", "text", "query", "prompt", "comment", "action"]:
+        if isinstance(payload, dict) and candidate_key in payload and isinstance(payload[candidate_key], str):
+            extracted_query = payload[candidate_key]
+            break
+    if not extracted_query:
+        extracted_query = f"Webhook event received for hook_id '{hook_id}'"
+
+    initial_vars = {
+        "input": extracted_query,
+        "query": extracted_query,
+        "webhook_payload": payload,
+        "webhook_headers": headers_dict,
+        "webhook_event": headers_dict.get("x-github-event") or headers_dict.get("x-event-type") or payload.get("event") or hook_id,
+        "webhook_id": hook_id
+    }
+
+    context = ExecutionContext(session_id=session_id, initial_variables=initial_vars)
+    runner = WorkflowRunner(max_steps=50)
+
+    try:
+        exec_result = await runner.run(graph, context)
+        final_output = exec_result.get("final_output")
+        extracted_outputs = extract_workflow_outputs(graph, context, final_output)
+
+        return {
+            "status": "success",
+            "hook_id": hook_id,
+            "flow_id": resolved_id,
+            "session_id": session_id,
+            "total_time_ms": exec_result.get("total_time_ms", 0),
+            "outputs": extracted_outputs,
+            "benchmarks": exec_result.get("benchmarks", {})
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Webhook workflow execution failed: {str(e)}")
