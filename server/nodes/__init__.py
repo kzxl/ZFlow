@@ -19,6 +19,7 @@ from .permission_guard_node import PermissionGuardNode
 from .semantic_cache_node import SemanticCacheNode
 from .subflow_node import SubflowNode
 from .webhook_node import WebhookTriggerNode
+from .gateway_node import GatewayNode
 
 __all__ = [
     "BaseNode",
@@ -44,5 +45,6 @@ __all__ = [
     "PermissionGuardNode",
     "SemanticCacheNode",
     "SubflowNode",
-    "WebhookTriggerNode"
+    "WebhookTriggerNode",
+    "GatewayNode"
 ]

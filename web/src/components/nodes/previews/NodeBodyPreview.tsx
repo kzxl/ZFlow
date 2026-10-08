@@ -7,6 +7,7 @@ import { System1Preview } from './System1Preview';
 import { PermissionGuardPreview } from './PermissionGuardPreview';
 import { SemanticCachePreview } from './SemanticCachePreview';
 import { RouterPreview } from './RouterPreview';
+import { GatewayPreview } from './GatewayPreview';
 
 interface Props {
   type: string;
@@ -15,6 +16,8 @@ interface Props {
 
 export const NodeBodyPreview: React.FC<Props> = ({ type, data }) => {
   switch (type) {
+    case 'gateway':
+      return <GatewayPreview data={data} />;
     case 'llm':
       return <LLMPreview data={data} />;
     case 'image_gen':

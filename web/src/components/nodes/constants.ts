@@ -192,5 +192,18 @@ export const DEFAULT_PORTS: Record<string, { inputs: PortDefinition[]; outputs: 
       { name: 'event', type: 'string', label: 'Event Name' },
       { name: 'query', type: 'string', label: 'Normalized Query' }
     ]
+  },
+  gateway: {
+    inputs: [
+      { name: 'input', type: 'any', label: 'Request / Payload' },
+      { name: 'context', type: 'object', label: 'Headers / Ctx (Opt)' }
+    ],
+    outputs: [
+      { name: 'route_a', type: 'any', label: '🔀 Route A (Primary)' },
+      { name: 'route_b', type: 'any', label: '🔀 Route B (Secondary)' },
+      { name: 'route_c', type: 'any', label: '🔀 Route C (Tertiary)' },
+      { name: 'throttled', type: 'any', label: '⏳ Throttled (Rate Limit)' },
+      { name: 'fallback', type: 'any', label: '🛡️ Fallback (Circuit Open)' }
+    ]
   }
 };
