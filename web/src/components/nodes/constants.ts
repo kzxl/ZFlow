@@ -17,6 +17,9 @@ export const DEFAULT_PORTS: Record<string, { inputs: PortDefinition[]; outputs: 
     inputs: [],
     outputs: [
       { name: 'query', type: 'string', label: 'User Query' },
+      { name: 'payload', type: 'object', label: 'Structured Payload (JSON)' },
+      { name: 'task_type', type: 'string', label: 'Task Type / Purpose' },
+      { name: 'metadata', type: 'object', label: 'Envelope Metadata' },
       { name: 'session_id', type: 'string', label: 'Session ID' },
       { name: 'access_token', type: 'string', label: 'Access Token (JWT)' }
     ]
@@ -191,6 +194,8 @@ export const DEFAULT_PORTS: Record<string, { inputs: PortDefinition[]; outputs: 
       { name: 'payload', type: 'object', label: 'Webhook Body' },
       { name: 'headers', type: 'object', label: 'HTTP Headers' },
       { name: 'event', type: 'string', label: 'Event Name' },
+      { name: 'task_type', type: 'string', label: 'Task Type / Purpose' },
+      { name: 'metadata', type: 'object', label: 'Envelope Metadata' },
       { name: 'query', type: 'string', label: 'Normalized Query' },
       { name: 'access_token', type: 'string', label: 'Access Token (JWT)' }
     ]

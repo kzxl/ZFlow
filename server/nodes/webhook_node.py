@@ -20,6 +20,8 @@ class WebhookTriggerNode(BaseNode):
         PortDef(name="payload", data_type="object", label="Webhook Body"),
         PortDef(name="headers", data_type="object", label="HTTP Headers"),
         PortDef(name="event", data_type="string", label="Event Name"),
+        PortDef(name="task_type", data_type="string", label="Task Type / Purpose"),
+        PortDef(name="metadata", data_type="object", label="Envelope Metadata"),
         PortDef(name="query", data_type="string", label="Normalized Query"),
         PortDef(name="access_token", data_type="string", label="Access Token (JWT)")
     ]
@@ -76,20 +78,44 @@ class WebhookTriggerNode(BaseNode):
         if not access_token:
             access_token = context.get_variable("access_token") or context.get_variable("token") or ""
 
+        # Extract task_type and metadata
+        task_type = (
+            (payload.get("task_type") if isinstance(payload, dict) else None)
+            or (payload.get("action") if isinstance(payload, dict) else None)
+            or headers.get("x-task-type")
+            or headers.get("x-event-type")
+            or context.get_variable("task_type")
+            or "webhook"
+        )
+        metadata = {
+            "event": str(event),
+            "hook_id": config.get("hook_id", ""),
+            "headers": headers,
+            "source": "webhook",
+            "session_id": context.session_id
+        }
+        if isinstance(payload, dict) and "metadata" in payload and isinstance(payload["metadata"], dict):
+            metadata.update(payload["metadata"])
+
         # Sync to context variables for downstream nodes
         context.set_variable("input", query)
         context.set_variable("query", query)
+        context.set_variable("payload", payload)
         context.set_variable("webhook_payload", payload)
         context.set_variable("webhook_headers", headers)
         context.set_variable("webhook_event", event)
+        context.set_variable("task_type", task_type)
+        context.set_variable("metadata", metadata)
         context.set_variable("access_token", access_token)
 
-        context.log("info", f"Webhook trigger processed event: '{event}', hook_id: '{config.get('hook_id')}'")
+        context.log("info", f"Webhook trigger processed event: '{event}', task_type: '{task_type}', hook_id: '{config.get('hook_id')}'")
 
         return {
             "payload": payload,
             "headers": headers,
             "event": str(event),
+            "task_type": str(task_type),
+            "metadata": metadata,
             "query": str(query),
             "access_token": access_token
         }
