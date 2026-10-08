@@ -6,6 +6,8 @@ from .router_node import RouterNode
 from .tool_node import ToolNode
 from .memory_node import MemoryNode
 from .output_node import OutputNode
+from .code_node import CodeNode
+from .http_node import HttpNode
 
 __all__ = [
     "BaseNode",
@@ -17,5 +19,7 @@ __all__ = [
     "RouterNode",
     "ToolNode",
     "MemoryNode",
-    "OutputNode"
+    "OutputNode",
+    "CodeNode",
+    "HttpNode"
 ]

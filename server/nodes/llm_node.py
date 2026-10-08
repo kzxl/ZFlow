@@ -1,9 +1,9 @@
 """
 LLM Node for ZFlow.
 Supports OpenAI-compatible APIs, local Ollama endpoints, and a high-fidelity simulator mode.
-Streams tokens in real time via SSE.
+Streams tokens in real time via SSE with rich inference hyperparameters.
 """
-from typing import Dict, Any, AsyncGenerator
+from typing import Dict, Any, AsyncGenerator, List
 import asyncio
 import json
 import httpx
@@ -16,7 +16,7 @@ class LlmNode(BaseNode):
     node_type = "llm"
     name = "LLM Engine"
     category = "llm"
-    description = "Executes LLM inference with token-by-token streaming, custom system prompts, and temperature controls."
+    description = "Executes LLM inference with token-by-token streaming, custom system prompts, and full hyperparameter controls."
     icon = "Sparkles"
 
     inputs = [
@@ -37,22 +37,73 @@ class LlmNode(BaseNode):
             "default": "simulator"
         },
         "model": {
-            "type": "string",
+            "type": "select",
             "label": "Model Name",
+            "options": [
+                "gpt-4o",
+                "gpt-4o-mini",
+                "claude-3-5-sonnet",
+                "deepseek-chat",
+                "llama3.1:8b",
+                "qwen2.5:7b",
+                "custom"
+            ],
             "default": "gpt-4o-mini"
+        },
+        "custom_model": {
+            "type": "string",
+            "label": "Custom Model (if model is 'custom')",
+            "default": ""
         },
         "temperature": {
             "type": "number",
-            "label": "Temperature",
+            "label": "Temperature (Creativity)",
             "min": 0.0,
             "max": 2.0,
-            "step": 0.1,
+            "step": 0.05,
             "default": 0.7
+        },
+        "top_p": {
+            "type": "number",
+            "label": "Top P (Nucleus Sampling)",
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "default": 1.0
         },
         "max_tokens": {
             "type": "number",
-            "label": "Max Tokens",
-            "default": 1024
+            "label": "Max Output Tokens",
+            "min": 1,
+            "max": 32768,
+            "default": 2048
+        },
+        "response_format": {
+            "type": "select",
+            "label": "Response Format",
+            "options": ["text", "json_object"],
+            "default": "text"
+        },
+        "presence_penalty": {
+            "type": "number",
+            "label": "Presence Penalty",
+            "min": -2.0,
+            "max": 2.0,
+            "step": 0.1,
+            "default": 0.0
+        },
+        "frequency_penalty": {
+            "type": "number",
+            "label": "Frequency Penalty",
+            "min": -2.0,
+            "max": 2.0,
+            "step": 0.1,
+            "default": 0.0
+        },
+        "stop_sequences": {
+            "type": "string",
+            "label": "Stop Sequences (comma-separated)",
+            "default": ""
         },
         "api_base": {
             "type": "string",
@@ -63,6 +114,13 @@ class LlmNode(BaseNode):
             "type": "password",
             "label": "API Key",
             "default": ""
+        },
+        "timeout_seconds": {
+            "type": "number",
+            "label": "Request Timeout (Seconds)",
+            "min": 5,
+            "max": 300,
+            "default": 60
         }
     }
 
@@ -97,14 +155,22 @@ class LlmNode(BaseNode):
         # Real API streaming (OpenAI / Ollama / vLLM)
         api_base = config.get("api_base", "https://api.openai.com/v1").rstrip("/")
         api_key = config.get("api_key") or os.environ.get("OPENAI_API_KEY", "")
-        model = config.get("model", "gpt-4o-mini")
+        
+        selected_model = config.get("model", "gpt-4o-mini")
+        model = config.get("custom_model") if selected_model == "custom" and config.get("custom_model") else selected_model
+        
         temperature = float(config.get("temperature", 0.7))
+        top_p = float(config.get("top_p", 1.0))
+        max_tokens = int(config.get("max_tokens", 2048))
+        presence_penalty = float(config.get("presence_penalty", 0.0))
+        frequency_penalty = float(config.get("frequency_penalty", 0.0))
+        timeout_sec = float(config.get("timeout_seconds", 60.0))
 
         if provider == "ollama" and "/v1" not in api_base:
             api_base = f"{api_base}/v1"
 
         messages = [{"role": "system", "content": system_prompt}]
-        for turn in history[-6:]: # Keep last 6 turns
+        for turn in history[-8:]: # Keep last 8 turns
             messages.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
         messages.append({"role": "user", "content": prompt})
 
@@ -112,15 +178,31 @@ class LlmNode(BaseNode):
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}" if api_key else ""
         }
-        payload = {
+        
+        payload: Dict[str, Any] = {
             "model": model,
             "messages": messages,
             "temperature": temperature,
+            "top_p": top_p,
+            "max_tokens": max_tokens,
+            "presence_penalty": presence_penalty,
+            "frequency_penalty": frequency_penalty,
             "stream": True
         }
 
+        # Handle response_format
+        if config.get("response_format") == "json_object":
+            payload["response_format"] = {"type": "json_object"}
+
+        # Handle stop sequences
+        stops = config.get("stop_sequences", "")
+        if stops and isinstance(stops, str):
+            seqs = [s.strip() for s in stops.split(",") if s.strip()]
+            if seqs:
+                payload["stop"] = seqs
+
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=timeout_sec) as client:
                 async with client.stream("POST", f"{api_base}/chat/completions", headers=headers, json=payload) as response:
                     if response.status_code != 200:
                         err_text = await response.aread()
@@ -145,23 +227,30 @@ class LlmNode(BaseNode):
             yield {"type": "token", "token": f"[LlmNode Connection Error: {str(e)}]"}
 
     async def _stream_simulator(self, prompt: str, system_prompt: str, config: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
-        """
-        Simulates an intelligent LLM response for rapid local workflow prototyping and testing.
-        """
-        model = config.get("model", "gpt-4o-mini")
-        
-        # Build contextual simulation
-        response_body = (
-            f"Chào bạn! Tôi đang xử lý yêu cầu qua ZFlow Engine ({model}).\n\n"
-            f"**Nội dung tiếp nhận:** \"{prompt}\"\n\n"
-            f"**Quy trình đã thực thi:**\n"
-            f"- Đã nạp chỉ thị hệ thống: *\"{system_prompt[:60]}...\"*\n"
-            f"- Các biến ngữ cảnh và lịch sử hội thoại đã được liên kết chính xác qua các Node.\n"
-            f"- Luồng dữ liệu hoàn tất chuẩn hóa và đang truyền tải kết quả qua Server-Sent Events (SSE).\n\n"
-            f"Hệ thống workflow đã sẵn sàng để tích hợp thêm các Tool, Router hoặc kết nối trực tiếp đến Ollama / OpenAI API key!"
-        )
+        selected_model = config.get("model", "gpt-4o-mini")
+        model = config.get("custom_model") if selected_model == "custom" and config.get("custom_model") else selected_model
+        temp = config.get("temperature", 0.7)
+        fmt = config.get("response_format", "text")
 
-        # Stream word by word with sub-millisecond to ~15ms delay
+        if fmt == "json_object":
+            response_body = json.dumps({
+                "status": "success",
+                "query": prompt,
+                "model": model,
+                "temperature": temp,
+                "message": "Phản hồi chuẩn định dạng JSON từ ZFlow Engine."
+            }, indent=2, ensure_ascii=False)
+        else:
+            response_body = (
+                f"Chào bạn! Tôi đang xử lý yêu cầu qua ZFlow Engine ({model}, temp={temp}).\n\n"
+                f"**Nội dung tiếp nhận:** \"{prompt}\"\n\n"
+                f"**Quy trình đã thực thi:**\n"
+                f"- Đã nạp chỉ thị hệ thống: *\"{system_prompt[:60]}...\"*\n"
+                f"- Các biến ngữ cảnh và lịch sử hội thoại đã được liên kết chính xác qua các Node.\n"
+                f"- Luồng dữ liệu hoàn tất chuẩn hóa và đang truyền tải kết quả qua Server-Sent Events (SSE).\n\n"
+                f"Hệ thống workflow đã sẵn sàng để tích hợp thêm các Tool, Router hoặc kết nối trực tiếp đến Ollama / OpenAI API key!"
+            )
+
         words = response_body.split(" ")
         for i, word in enumerate(words):
             chunk = word + (" " if i < len(words) - 1 else "")

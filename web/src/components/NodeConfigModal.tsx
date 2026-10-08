@@ -112,7 +112,7 @@ export const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
 
                 {fieldSchema.type === 'textarea' && (
                   <textarea
-                    rows={4}
+                    rows={6}
                     value={val ?? ''}
                     onChange={(e) => handleChange(fieldKey, e.target.value)}
                     className="w-full px-3 py-2 bg-slate-900 border border-slate-700/80 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 font-mono text-[11px] leading-relaxed resize-y"
@@ -134,15 +134,35 @@ export const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
                 )}
 
                 {fieldSchema.type === 'number' && (
-                  <input
-                    type="number"
-                    min={fieldSchema.min}
-                    max={fieldSchema.max}
-                    step={fieldSchema.step || 1}
-                    value={val ?? 0}
-                    onChange={(e) => handleChange(fieldKey, parseFloat(e.target.value))}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700/80 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 font-mono text-[11px]"
-                  />
+                  <div className="space-y-1">
+                    {fieldSchema.min !== undefined && fieldSchema.max !== undefined && (
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="range"
+                          min={fieldSchema.min}
+                          max={fieldSchema.max}
+                          step={fieldSchema.step || 0.1}
+                          value={val ?? 0}
+                          onChange={(e) => handleChange(fieldKey, parseFloat(e.target.value))}
+                          className="flex-1 accent-indigo-500"
+                        />
+                        <span className="w-12 text-center py-0.5 px-1 bg-slate-800 rounded font-mono text-indigo-300 font-semibold border border-slate-700">
+                          {val}
+                        </span>
+                      </div>
+                    )}
+                    {!(fieldSchema.min !== undefined && fieldSchema.max !== undefined) && (
+                      <input
+                        type="number"
+                        min={fieldSchema.min}
+                        max={fieldSchema.max}
+                        step={fieldSchema.step || 1}
+                        value={val ?? 0}
+                        onChange={(e) => handleChange(fieldKey, parseFloat(e.target.value))}
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700/80 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 font-mono text-[11px]"
+                      />
+                    )}
+                  </div>
                 )}
               </div>
             );

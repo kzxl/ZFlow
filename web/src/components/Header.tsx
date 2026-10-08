@@ -8,7 +8,8 @@ import {
   Trash2, 
   MessageSquareCode, 
   CheckCircle, 
-  Activity 
+  Activity,
+  Terminal
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -19,6 +20,7 @@ interface HeaderProps {
   onClear: () => void;
   onExport: () => void;
   onImport: (content: string) => void;
+  onOpenApiModal: () => void;
   isChatOpen: boolean;
   onToggleChat: () => void;
   isSaving?: boolean;
@@ -32,6 +34,7 @@ export const Header: React.FC<HeaderProps> = ({
   onClear,
   onExport,
   onImport,
+  onOpenApiModal,
   isChatOpen,
   onToggleChat,
   isSaving
@@ -120,6 +123,15 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <Save size={13} />
           <span>{isSaving ? 'Saving...' : 'Save Flow'}</span>
+        </button>
+
+        <button
+          onClick={onOpenApiModal}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-cyan-300 hover:text-white bg-cyan-950/40 hover:bg-cyan-900/60 border border-cyan-800/60 rounded-lg shadow-sm transition-colors"
+          title="View API Call Snippets & Webhook URL"
+        >
+          <Terminal size={13} />
+          <span>API Trigger</span>
         </button>
 
         <div className="h-4 w-px bg-slate-800 mx-1"></div>

@@ -8,6 +8,8 @@ import {
   Wrench, 
   Database, 
   Send, 
+  Code2,
+  Globe,
   Settings2, 
   CheckCircle2, 
   AlertCircle, 
@@ -33,7 +35,9 @@ const ICONS: Record<string, React.ElementType> = {
   GitBranch,
   Wrench,
   Database,
-  Send
+  Send,
+  Code2,
+  Globe
 };
 
 interface CustomFlowCardProps {
@@ -134,9 +138,25 @@ export const CustomFlowCard: React.FC<CustomFlowCardProps> = ({ id, type, data, 
           </div>
         )}
 
+        {type === 'code' && (
+          <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 font-mono text-[10px] text-purple-300 line-clamp-2">
+            Python def main(inputs, ctx)...
+          </div>
+        )}
+
+        {type === 'http' && (
+          <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 flex flex-col gap-0.5 text-slate-400">
+            <div className="flex justify-between">
+              <span>Method:</span>
+              <span className="font-mono text-cyan-300 font-semibold">{data.config?.method || 'POST'}</span>
+            </div>
+            <div className="text-[10px] text-slate-500 truncate">{data.config?.url || 'https://...'}</div>
+          </div>
+        )}
+
         {type === 'output' && (
           <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 text-slate-400">
-            Final Assistant Output Stream
+            Field: <span className="font-mono text-cyan-300">"{data.config?.output_key || 'reply'}"</span>
           </div>
         )}
 

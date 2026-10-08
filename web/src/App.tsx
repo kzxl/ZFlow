@@ -19,6 +19,7 @@ import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { ChatDrawer } from './components/ChatDrawer';
 import { NodeConfigModal } from './components/NodeConfigModal';
+import { ApiModal } from './components/ApiModal';
 import { CustomFlowCard } from './components/nodes/CustomFlowCard';
 
 import { NodeMetadata, WorkflowDefinition, CustomNodeData } from './types/workflow';
@@ -32,6 +33,7 @@ function FlowCanvas() {
   const [nodeDefs, setNodeDefs] = useState<NodeMetadata[]>([]);
   const [flowName, setFlowName] = useState('Standard Chatbot Flow');
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isApiModalOpen, setIsApiModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   // Modal state
@@ -331,6 +333,7 @@ function FlowCanvas() {
         onClear={handleClear}
         onExport={handleExport}
         onImport={handleImport}
+        onOpenApiModal={() => setIsApiModalOpen(true)}
         isChatOpen={isChatOpen}
         onToggleChat={() => setIsChatOpen(!isChatOpen)}
         isSaving={isSaving}
@@ -382,6 +385,14 @@ function FlowCanvas() {
         nodeConfig={modalState.nodeConfig}
         metadata={selectedMeta}
         onSave={handleSaveNodeConfig}
+      />
+
+      {/* External API Integration Modal */}
+      <ApiModal
+        isOpen={isApiModalOpen}
+        onClose={() => setIsApiModalOpen(false)}
+        flowId={DEFAULT_FLOW_ID}
+        flowName={flowName}
       />
     </div>
   );

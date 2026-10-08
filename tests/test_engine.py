@@ -27,6 +27,8 @@ def test_node_registry():
     assert "tool" in types
     assert "memory" in types
     assert "output" in types
+    assert "code" in types
+    assert "http" in types
     print(f"Verified {len(registered)} registered nodes.")
 
 async def test_full_workflow_batch():

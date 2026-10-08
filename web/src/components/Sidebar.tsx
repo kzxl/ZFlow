@@ -7,6 +7,8 @@ import {
   Wrench, 
   Database, 
   Send, 
+  Code2,
+  Globe,
   Search, 
   PlusCircle, 
   Layers 
@@ -20,7 +22,9 @@ const ICONS: Record<string, React.ElementType> = {
   GitBranch,
   Wrench,
   Database,
-  Send
+  Send,
+  Code2,
+  Globe
 };
 
 interface SidebarProps {
