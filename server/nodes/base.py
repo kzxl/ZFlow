@@ -2,9 +2,12 @@
 ZFlow Base Node and Node Registry.
 Defines execution contracts, metadata schemas, and input/output port definitions.
 """
+from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Optional, AsyncGenerator, Type
-from engine.context import ExecutionContext
+from typing import Dict, Any, List, Optional, AsyncGenerator, Type, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from engine.context import ExecutionContext
 
 class PortDef:
     def __init__(self, name: str, data_type: str = "any", label: Optional[str] = None, required: bool = False, description: str = ""):

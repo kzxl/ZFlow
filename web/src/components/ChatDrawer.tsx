@@ -22,7 +22,9 @@ import {
   Gauge,
   BarChart2,
   FileText,
-  FileJson
+  FileJson,
+  ExternalLink,
+  Image as ImageIcon
 } from 'lucide-react';
 import { ChatMessage, WorkflowDefinition, ExecutionBenchmark } from '../types/workflow';
 import { 
@@ -248,6 +250,130 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
     link.click();
     URL.revokeObjectURL(url);
     setShowExportMenu(false);
+  };
+
+  // Helper to render message content with rich markdown image preview
+  const renderMessageContent = (content: string) => {
+    if (!content) return null;
+
+    // 1. Check if string contains markdown image syntax: ![alt](url)
+    const mdImageRegex = /!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g;
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = mdImageRegex.exec(content)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(
+          <span key={`txt_${lastIndex}`} className="whitespace-pre-wrap">
+            {content.substring(lastIndex, match.index)}
+          </span>
+        );
+      }
+      const altText = match[1] || 'AI Generated Image';
+      const imgUrl = match[2];
+      parts.push(
+        <div key={`img_${match.index}`} className="my-2.5 rounded-xl overflow-hidden border border-slate-700/80 bg-slate-950/80 shadow-xl group">
+          <div className="relative">
+            <img
+              src={imgUrl}
+              alt={altText}
+              loading="lazy"
+              className="w-full max-h-72 object-contain bg-black/50"
+            />
+            <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-md text-[10px] font-mono text-pink-300 border border-pink-500/30 flex items-center gap-1">
+              <ImageIcon size={11} className="text-pink-400" />
+              <span>AI Image</span>
+            </div>
+          </div>
+          <div className="p-2 bg-slate-900/90 border-t border-slate-800 flex items-center justify-between text-[11px]">
+            <span className="text-slate-300 truncate max-w-[210px] font-mono text-[10px]" title={altText}>
+              {altText}
+            </span>
+            <div className="flex items-center gap-1.5">
+              <a
+                href={imgUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors flex items-center gap-1 text-[10px]"
+                title="Mở ảnh kích thước đầy đủ"
+              >
+                <ExternalLink size={12} />
+              </a>
+              <a
+                href={imgUrl}
+                download="zflow_generated.png"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-1 text-slate-400 hover:text-pink-300 hover:bg-slate-800 rounded transition-colors flex items-center gap-1 text-[10px]"
+                title="Tải ảnh về máy"
+              >
+                <Download size={12} />
+              </a>
+            </div>
+          </div>
+        </div>
+      );
+      lastIndex = match.index + match[0].length;
+    }
+
+    if (parts.length > 0) {
+      if (lastIndex < content.length) {
+        parts.push(
+          <span key={`txt_end_${lastIndex}`} className="whitespace-pre-wrap">
+            {content.substring(lastIndex)}
+          </span>
+        );
+      }
+      return <div>{parts}</div>;
+    }
+
+    // 2. Direct single image URL detection (e.g. pollinations.ai, unsplash or raw image url)
+    const directUrlRegex = /^(https?:\/\/[^\s]+?\.(png|jpg|jpeg|webp|gif)(\?[^\s]*)?|https?:\/\/image\.pollinations\.ai\/[^\s]+)$/i;
+    const trimmed = content.trim();
+    if (directUrlRegex.test(trimmed)) {
+      return (
+        <div>
+          <div className="my-2 rounded-xl overflow-hidden border border-slate-700/80 bg-slate-950/80 shadow-xl">
+            <img
+              src={trimmed}
+              alt="Generated output"
+              loading="lazy"
+              className="w-full max-h-72 object-contain bg-black/50"
+            />
+            <div className="p-2 bg-slate-900/90 border-t border-slate-800 flex items-center justify-between text-[11px]">
+              <span className="text-slate-400 truncate max-w-[210px] font-mono text-[10px]">
+                {trimmed}
+              </span>
+              <div className="flex items-center gap-1.5">
+                <a
+                  href={trimmed}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded"
+                  title="Mở tab mới"
+                >
+                  <ExternalLink size={12} />
+                </a>
+                <a
+                  href={trimmed}
+                  download="zflow_output.png"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1 text-slate-400 hover:text-pink-300 hover:bg-slate-800 rounded"
+                  title="Tải ảnh về máy"
+                >
+                  <Download size={12} />
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Default regular text
+    return <div className="whitespace-pre-wrap">{content}</div>;
   };
 
   const handleSendMessage = async () => {
@@ -586,7 +712,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                 }`}
               >
                 {msg.content ? (
-                  <div className="whitespace-pre-wrap">{msg.content}</div>
+                  renderMessageContent(msg.content)
                 ) : (
                   <span className="flex items-center gap-1.5 text-slate-400 italic">
                     <Loader2 size={12} className="animate-spin text-indigo-400" />

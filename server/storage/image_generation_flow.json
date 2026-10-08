@@ -1,0 +1,87 @@
+{
+  "id": "image_generation_flow",
+  "name": "ComfyUI AI Image Generation Suite",
+  "description": "Text-to-Image pipeline inspired by ComfyUI with artistic prompt styling, negative prompts, and aspect ratio control.",
+  "nodes": [
+    {
+      "id": "node_input",
+      "type": "input",
+      "title": "Image Prompt Input",
+      "position": { "x": 60, "y": 200 },
+      "data": {
+        "title": "Image Prompt Input",
+        "config": {
+          "default_query": "A majestic dragon perched on a floating crystal island surrounded by aurora borealis"
+        }
+      }
+    },
+    {
+      "id": "node_styler",
+      "type": "prompt_styler",
+      "title": "ComfyUI Prompt Styler",
+      "position": { "x": 420, "y": 180 },
+      "data": {
+        "title": "ComfyUI Prompt Styler",
+        "config": {
+          "style": "cinematic",
+          "lighting": "dramatic",
+          "camera": "wide_angle",
+          "quality_preset": "high",
+          "enable_negative_prompts": true
+        }
+      }
+    },
+    {
+      "id": "node_image_gen",
+      "type": "image_gen",
+      "title": "AI Image Generator",
+      "position": { "x": 800, "y": 180 },
+      "data": {
+        "title": "AI Image Generator",
+        "config": {
+          "provider": "flux_pollinations",
+          "aspect_ratio": "16:9",
+          "steps": 25,
+          "guidance_scale": 7.5,
+          "seed": -1
+        }
+      }
+    },
+    {
+      "id": "node_output",
+      "type": "output",
+      "title": "Rendered Image Output",
+      "position": { "x": 1200, "y": 200 },
+      "data": {
+        "title": "Rendered Image Output",
+        "config": {
+          "prefix": "🎨 **Kết quả sinh ảnh từ ZFlow Image Suite:**\n\n",
+          "suffix": "\n\n_Generated via ZFlow Engine & ComfyUI Suite._"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-input-styler",
+      "source": "node_input",
+      "target": "node_styler",
+      "sourceHandle": "query",
+      "targetHandle": "base_prompt"
+    },
+    {
+      "id": "edge-styler-imagegen",
+      "source": "node_styler",
+      "target": "node_image_gen",
+      "sourceHandle": "styled_prompt",
+      "targetHandle": "prompt"
+    },
+    {
+      "id": "edge-imagegen-output",
+      "source": "node_image_gen",
+      "target": "node_output",
+      "sourceHandle": "markdown_image",
+      "targetHandle": "response_text"
+    }
+  ]
+}

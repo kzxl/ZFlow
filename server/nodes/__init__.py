@@ -12,6 +12,9 @@ from .llm_router_node import LlmRouterNode
 from .rag_node import RagNode
 from .agent_node import AgentNode
 from .human_input_node import HumanInputNode
+from .prompt_styler_node import PromptStylerNode
+from .image_gen_node import ImageGenNode
+from .vision_node import VisionNode
 
 __all__ = [
     "BaseNode",
@@ -29,5 +32,8 @@ __all__ = [
     "HttpNode",
     "RagNode",
     "AgentNode",
-    "HumanInputNode"
+    "HumanInputNode",
+    "PromptStylerNode",
+    "ImageGenNode",
+    "VisionNode"
 ]

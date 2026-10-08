@@ -14,6 +14,10 @@ import {
   BookOpen,
   BrainCircuit,
   UserCheck,
+  Image,
+  Palette,
+  Eye,
+  ExternalLink,
   Settings2, 
   CheckCircle2, 
   AlertCircle, 
@@ -30,6 +34,7 @@ const CATEGORY_COLORS: Record<string, { bg: string; border: string; badge: strin
   logic: { bg: 'bg-rose-950/50', border: 'border-rose-600/40', badge: 'bg-rose-500/20 text-rose-400', text: 'text-rose-400' },
   tool: { bg: 'bg-blue-950/50', border: 'border-blue-600/40', badge: 'bg-blue-500/20 text-blue-400', text: 'text-blue-400' },
   memory: { bg: 'bg-purple-950/50', border: 'border-purple-600/40', badge: 'bg-purple-500/20 text-purple-400', text: 'text-purple-400' },
+  media: { bg: 'bg-pink-950/50', border: 'border-pink-600/40', badge: 'bg-pink-500/20 text-pink-400', text: 'text-pink-400' },
   output: { bg: 'bg-cyan-950/50', border: 'border-cyan-600/40', badge: 'bg-cyan-500/20 text-cyan-400', text: 'text-cyan-400' },
   general: { bg: 'bg-slate-900/60', border: 'border-slate-700/60', badge: 'bg-slate-700/50 text-slate-300', text: 'text-slate-300' }
 };
@@ -43,6 +48,9 @@ const ICONS: Record<string, React.ElementType> = {
   BookOpen,
   BrainCircuit,
   UserCheck,
+  Image,
+  Palette,
+  Eye,
   Wrench,
   Database,
   Send,
@@ -374,6 +382,84 @@ export const CustomFlowCard: React.FC<CustomFlowCardProps> = ({ id, type, data, 
               <span className="font-mono text-cyan-300 font-semibold">{data.config?.method || 'POST'}</span>
             </div>
             <div className="text-[10px] text-slate-500 truncate">{data.config?.url || 'https://...'}</div>
+          </div>
+        )}
+
+        {type === 'image_gen' && (
+          <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 space-y-1.5">
+            <div className="flex justify-between text-slate-400">
+              <span>Provider:</span>
+              <span className="font-mono text-pink-300 font-semibold uppercase text-[10px]">
+                {data.config?.provider || 'simulator'}
+              </span>
+            </div>
+            <div className="flex justify-between text-slate-400">
+              <span>Ratio:</span>
+              <span className="font-mono text-slate-300">{data.config?.aspect_ratio || '1:1'}</span>
+            </div>
+            {/* Live ComfyUI-style Image Preview on Canvas Card */}
+            {(data.lastOutput?.image_url || data.config?.preview_url) && (
+              <div className="mt-1.5 rounded-lg overflow-hidden border border-pink-500/40 relative group shadow-md">
+                <img
+                  src={data.lastOutput?.image_url || data.config?.preview_url}
+                  alt="AI Generated"
+                  className="w-full h-28 object-cover rounded-md hover:scale-105 transition-transform duration-200"
+                />
+                <a
+                  href={data.lastOutput?.image_url || data.config?.preview_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="absolute top-1 right-1 p-1 bg-black/80 hover:bg-black text-white rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 shadow"
+                  title="Mở ảnh kích thước đầy đủ"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ExternalLink size={10} />
+                </a>
+              </div>
+            )}
+          </div>
+        )}
+
+        {type === 'prompt_styler' && (
+          <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 flex flex-col gap-1 text-slate-400">
+            <div className="flex justify-between">
+              <span>Style:</span>
+              <span className="font-mono text-amber-300 font-semibold capitalize">{data.config?.style || 'cinematic'}</span>
+            </div>
+            <div className="flex justify-between text-[10px]">
+              <span>Lighting:</span>
+              <span className="font-mono text-slate-400">{data.config?.lighting || 'dramatic'}</span>
+            </div>
+          </div>
+        )}
+
+        {type === 'vision' && (
+          <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 flex flex-col gap-1 text-slate-400">
+            <div className="flex justify-between">
+              <span>Task:</span>
+              <span className="font-mono text-indigo-300 font-semibold text-[10px]">{data.config?.task_mode || 'general_description'}</span>
+            </div>
+          </div>
+        )}
+
+        {type === 'rag' && (
+          <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 flex justify-between text-slate-400">
+            <span>Top Chunks:</span>
+            <span className="font-mono text-purple-300 font-semibold">{data.config?.top_k || 3}</span>
+          </div>
+        )}
+
+        {type === 'agent' && (
+          <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 flex justify-between text-slate-400">
+            <span>Loops:</span>
+            <span className="font-mono text-indigo-300 font-semibold">{data.config?.max_iterations || 4} iters</span>
+          </div>
+        )}
+
+        {type === 'human_input' && (
+          <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 flex justify-between text-slate-400">
+            <span>Approval:</span>
+            <span className="font-mono text-rose-300 font-semibold">{data.config?.action_type || 'approve_reject'}</span>
           </div>
         )}
 

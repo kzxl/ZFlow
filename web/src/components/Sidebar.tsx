@@ -13,6 +13,9 @@ import {
   Send, 
   Code2,
   Globe,
+  Image,
+  Palette,
+  Eye,
   Search, 
   Plus, 
   Layers, 
@@ -33,6 +36,9 @@ const ICONS: Record<string, React.ElementType> = {
   BookOpen,
   BrainCircuit,
   UserCheck,
+  Image,
+  Palette,
+  Eye,
   Wrench,
   Database,
   Send,
@@ -47,6 +53,7 @@ const CATEGORY_COLORS: Record<string, { badge: string; text: string; dot: string
   logic: { badge: 'bg-rose-500/15 text-rose-400 border-rose-500/30', text: 'text-rose-400', dot: 'bg-rose-400' },
   tool: { badge: 'bg-blue-500/15 text-blue-400 border-blue-500/30', text: 'text-blue-400', dot: 'bg-blue-400' },
   memory: { badge: 'bg-purple-500/15 text-purple-400 border-purple-500/30', text: 'text-purple-400', dot: 'bg-purple-400' },
+  media: { badge: 'bg-pink-500/15 text-pink-400 border-pink-500/30', text: 'text-pink-400', dot: 'bg-pink-400' },
   output: { badge: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30', text: 'text-cyan-400', dot: 'bg-cyan-400' },
   general: { badge: 'bg-slate-700/30 text-slate-300 border-slate-700/50', text: 'text-slate-300', dot: 'bg-slate-400' }
 };
@@ -113,6 +120,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ nodeDefs, onAddNode }) => {
 
   const categories = [
     { id: 'all', label: 'All' },
+    { id: 'media', label: 'Image & Media' },
     { id: 'llm', label: 'AI & LLM' },
     { id: 'logic', label: 'Logic' },
     { id: 'tool', label: 'Tools' },
@@ -128,6 +136,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ nodeDefs, onAddNode }) => {
     if (!matchesSearch) return false;
 
     if (selectedCategory === 'all') return true;
+    if (selectedCategory === 'media') return node.category === 'media' || node.type === 'image_gen' || node.type === 'prompt_styler' || node.type === 'vision';
     if (selectedCategory === 'llm') return node.category === 'llm' || node.category === 'prompt';
     if (selectedCategory === 'logic') return node.category === 'logic';
     if (selectedCategory === 'tool') return node.category === 'tool';

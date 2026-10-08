@@ -1,4 +1,4 @@
-export type NodeCategory = 'input' | 'prompt' | 'llm' | 'logic' | 'tool' | 'memory' | 'output' | 'general';
+export type NodeCategory = 'input' | 'prompt' | 'llm' | 'logic' | 'tool' | 'memory' | 'output' | 'media' | 'general';
 
 export interface PortDefinition {
   name: string;
