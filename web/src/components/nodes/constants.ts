@@ -205,5 +205,18 @@ export const DEFAULT_PORTS: Record<string, { inputs: PortDefinition[]; outputs: 
       { name: 'throttled', type: 'any', label: '⏳ Throttled (Rate Limit)' },
       { name: 'fallback', type: 'any', label: '🛡️ Fallback (Circuit Open)' }
     ]
+  },
+  auth: {
+    inputs: [
+      { name: 'input', type: 'any', label: 'Payload / Query' },
+      { name: 'credentials', type: 'object', label: 'Credentials / Token' },
+      { name: 'headers', type: 'object', label: 'HTTP Headers (Opt)' }
+    ],
+    outputs: [
+      { name: 'authenticated', type: 'any', label: '✅ Authenticated' },
+      { name: 'unauthorized', type: 'object', label: '⛔ Unauthorized (401)' },
+      { name: 'access_token', type: 'string', label: 'JWT Token' },
+      { name: 'session_id', type: 'string', label: 'Session ID' }
+    ]
   }
 };
