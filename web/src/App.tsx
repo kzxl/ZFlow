@@ -20,9 +20,10 @@ import { Sidebar } from './components/Sidebar';
 import { ChatDrawer } from './components/ChatDrawer';
 import { NodeConfigModal } from './components/NodeConfigModal';
 import { ApiModal } from './components/ApiModal';
+import { ContextMenu } from './components/ContextMenu';
 import { CustomFlowCard } from './components/nodes/CustomFlowCard';
 
-import { NodeMetadata, WorkflowDefinition, CustomNodeData } from './types/workflow';
+import { NodeMetadata, WorkflowDefinition, CustomNodeData, ContextMenuState } from './types/workflow';
 import { fetchNodeDefinitions, fetchWorkflow, saveWorkflow } from './api/client';
 
 const DEFAULT_FLOW_ID = 'starter_chatbot_flow';
@@ -35,6 +36,21 @@ function FlowCanvas() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isApiModalOpen, setIsApiModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Context Menu state
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>({
+    isOpen: false,
+    type: 'pane',
+    x: 0,
+    y: 0
+  });
+
+  // Copied Node state for clipboard paste
+  const [copiedNode, setCopiedNode] = useState<{
+    type: string;
+    title: string;
+    config: Record<string, any>;
+  } | null>(null);
 
   // Modal state
   const [modalState, setModalState] = useState<{
@@ -201,9 +217,9 @@ function FlowCanvas() {
     [nodeDefs, reactFlowInstance, bindNode, setNodes]
   );
 
-  // Add node by clicking palette
+  // Add node by clicking palette or context menu
   const handleAddNode = useCallback(
-    (type: string) => {
+    (type: string, position?: { x: number; y: number }) => {
       const meta = nodeDefs.find((d) => d.type === type);
       const defaultConfig: Record<string, any> = {};
       if (meta?.configSchema) {
@@ -213,10 +229,15 @@ function FlowCanvas() {
       }
 
       const newNodeId = `node_${type}_${Date.now().toString().slice(-4)}`;
+      const newPos = position || {
+        x: 300 + Math.random() * 100,
+        y: 200 + Math.random() * 100
+      };
+
       const newNode: Node<CustomNodeData> = bindNode({
         id: newNodeId,
         type: type,
-        position: { x: 300 + Math.random() * 100, y: 200 + Math.random() * 100 },
+        position: newPos,
         data: {
           title: meta?.name || type,
           config: defaultConfig
@@ -227,6 +248,184 @@ function FlowCanvas() {
     },
     [nodeDefs, bindNode, setNodes]
   );
+
+  const handleDeleteEdge = useCallback(
+    (edgeId: string) => {
+      setEdges((eds) => eds.filter((e) => e.id !== edgeId));
+    },
+    [setEdges]
+  );
+
+  const handleCopyNode = useCallback(
+    (nodeId: string) => {
+      const target = nodes.find((n) => n.id === nodeId);
+      if (target) {
+        setCopiedNode({
+          type: target.type || 'base',
+          title: (target.data as any)?.title || target.type || 'Node',
+          config: { ...((target.data as any)?.config || {}) }
+        });
+      }
+    },
+    [nodes]
+  );
+
+  const handlePasteNode = useCallback(
+    (position?: { x: number; y: number }) => {
+      if (!copiedNode) return;
+
+      const newNodeId = `node_${copiedNode.type}_${Date.now().toString().slice(-4)}`;
+      const newPos = position || {
+        x: 350 + Math.random() * 50,
+        y: 250 + Math.random() * 50
+      };
+
+      const newNode: Node<CustomNodeData> = bindNode({
+        id: newNodeId,
+        type: copiedNode.type,
+        position: newPos,
+        selected: true,
+        data: {
+          title: `${copiedNode.title} (Copy)`,
+          config: { ...copiedNode.config }
+        }
+      });
+
+      setNodes((nds) => [...nds.map((n) => ({ ...n, selected: false })), newNode]);
+    },
+    [copiedNode, bindNode, setNodes]
+  );
+
+  const handleSelectAll = useCallback(() => {
+    setNodes((nds) => nds.map((n) => ({ ...n, selected: true })));
+  }, [setNodes]);
+
+  const handleFitView = useCallback(() => {
+    reactFlowInstance.fitView({ padding: 0.2, duration: 400 });
+  }, [reactFlowInstance]);
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenu((prev) => (prev.isOpen ? { ...prev, isOpen: false } : prev));
+  }, []);
+
+  const onPaneContextMenu = useCallback(
+    (event: MouseEvent | React.MouseEvent) => {
+      event.preventDefault();
+      const flowPosition = reactFlowInstance.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY
+      });
+      setContextMenu({
+        isOpen: true,
+        type: 'pane',
+        x: event.clientX,
+        y: event.clientY,
+        flowPosition
+      });
+    },
+    [reactFlowInstance]
+  );
+
+  const onNodeContextMenu = useCallback(
+    (event: MouseEvent | React.MouseEvent, node: Node) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      setNodes((nds) =>
+        nds.map((n) => ({
+          ...n,
+          selected: n.id === node.id
+        }))
+      );
+
+      setContextMenu({
+        isOpen: true,
+        type: 'node',
+        x: event.clientX,
+        y: event.clientY,
+        targetId: node.id,
+        nodeData: {
+          id: node.id,
+          type: node.type || 'default',
+          title: (node.data as any)?.title || node.type || 'Node',
+          config: (node.data as any)?.config || {}
+        }
+      });
+    },
+    [setNodes]
+  );
+
+  const onEdgeContextMenu = useCallback(
+    (event: MouseEvent | React.MouseEvent, edge: Edge) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      setContextMenu({
+        isOpen: true,
+        type: 'edge',
+        x: event.clientX,
+        y: event.clientY,
+        targetId: edge.id,
+        edgeData: {
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          sourceHandle: edge.sourceHandle,
+          targetHandle: edge.targetHandle
+        }
+      });
+    },
+    []
+  );
+
+  // Global Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+
+      // Ctrl+C / Cmd+C: Copy selected node
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+        const selectedNode = nodes.find((n) => n.selected);
+        if (selectedNode) {
+          e.preventDefault();
+          handleCopyNode(selectedNode.id);
+        }
+      }
+
+      // Ctrl+V / Cmd+V: Paste copied node
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+        if (copiedNode) {
+          e.preventDefault();
+          handlePasteNode();
+        }
+      }
+
+      // Ctrl+D / Cmd+D: Duplicate selected node
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+        const selectedNode = nodes.find((n) => n.selected);
+        if (selectedNode) {
+          e.preventDefault();
+          handleDuplicateNode(selectedNode.id);
+        }
+      }
+
+      // F: Fit View
+      if (e.key.toLowerCase() === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        handleFitView();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [nodes, copiedNode, handleCopyNode, handlePasteNode, handleDuplicateNode, handleFitView]);
 
   // Custom node types generator
   const nodeTypes = useMemo(() => {
@@ -380,6 +579,12 @@ function FlowCanvas() {
             onConnect={onConnect}
             onDragOver={onDragOver}
             onDrop={onDrop}
+            onPaneContextMenu={onPaneContextMenu}
+            onNodeContextMenu={onNodeContextMenu}
+            onEdgeContextMenu={onEdgeContextMenu}
+            onPaneClick={closeContextMenu}
+            onNodeClick={closeContextMenu}
+            onEdgeClick={closeContextMenu}
             fitView
             className="bg-[#090a0f]"
           >
@@ -419,6 +624,24 @@ function FlowCanvas() {
         onClose={() => setIsApiModalOpen(false)}
         flowId={DEFAULT_FLOW_ID}
         flowName={flowName}
+      />
+
+      {/* Right-click Context Menu */}
+      <ContextMenu
+        state={contextMenu}
+        nodeDefs={nodeDefs}
+        onClose={closeContextMenu}
+        onAddNode={handleAddNode}
+        onConfigureNode={handleOpenConfigModal}
+        onDuplicateNode={handleDuplicateNode}
+        onDeleteNode={handleDeleteNode}
+        onDeleteEdge={handleDeleteEdge}
+        onFitView={handleFitView}
+        onSelectAll={handleSelectAll}
+        onClearCanvas={handleClear}
+        onCopyNode={handleCopyNode}
+        onPasteNode={handlePasteNode}
+        hasClipboard={!!copiedNode}
       />
     </div>
   );

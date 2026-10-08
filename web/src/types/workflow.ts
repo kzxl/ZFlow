@@ -64,3 +64,27 @@ export interface WorkflowDefinition {
   nodes: any[];
   edges: any[];
 }
+
+export type ContextMenuType = 'pane' | 'node' | 'edge';
+
+export interface ContextMenuState {
+  isOpen: boolean;
+  type: ContextMenuType;
+  x: number;
+  y: number;
+  flowPosition?: { x: number; y: number };
+  targetId?: string;
+  nodeData?: {
+    id: string;
+    type: string;
+    title: string;
+    config: Record<string, any>;
+  };
+  edgeData?: {
+    id: string;
+    source: string;
+    target: string;
+    sourceHandle?: string | null;
+    targetHandle?: string | null;
+  };
+}
