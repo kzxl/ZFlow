@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   MessageSquare, 
   FileText, 
@@ -52,6 +52,56 @@ export const Sidebar: React.FC<SidebarProps> = ({ nodeDefs, onAddNode }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
+  const [width, setWidth] = useState<number>(() => {
+    const saved = localStorage.getItem('zflow_sidebar_width');
+    return saved ? Math.max(220, Math.min(600, parseInt(saved, 10))) : 288;
+  });
+  const [isResizing, setIsResizing] = useState<boolean>(false);
+
+  // Drag-to-resize sidebar panel
+  const startResizing = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      const minWidth = 220;
+      const maxWidth = Math.min(600, Math.floor(window.innerWidth * 0.45));
+
+      // Dragging too far left collapses the panel
+      if (e.clientX < 140) {
+        setIsCollapsed(true);
+        setIsResizing(false);
+        return;
+      }
+
+      const newWidth = Math.max(minWidth, Math.min(maxWidth, e.clientX));
+      setWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      if (isResizing) {
+        setIsResizing(false);
+        localStorage.setItem('zflow_sidebar_width', width.toString());
+      }
+    };
+
+    if (isResizing) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing, width]);
 
   const categories = [
     { id: 'all', label: 'All' },
@@ -85,7 +135,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ nodeDefs, onAddNode }) => {
   // Collapsed Sidebar View
   if (isCollapsed) {
     return (
-      <aside className="w-14 bg-[#0a0d14] border-r border-slate-800/80 flex flex-col items-center py-3 select-none z-10 transition-all duration-200">
+      <aside className="w-14 bg-[#0a0d14] border-r border-slate-800/80 flex flex-col items-center py-3 select-none z-10 transition-all duration-200 shrink-0">
         <button
           onClick={() => setIsCollapsed(false)}
           className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors mb-4"
@@ -123,7 +173,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ nodeDefs, onAddNode }) => {
 
   // Expanded Professional Sidebar View
   return (
-    <aside className="w-72 bg-[#0a0d14] border-r border-slate-800/80 flex flex-col h-full select-none z-10 transition-all duration-200">
+    <aside
+      style={{ width: `${width}px` }}
+      className={`relative bg-[#0a0d14] border-r border-slate-800/80 flex flex-col h-full select-none z-10 shrink-0 ${
+        isResizing ? '' : 'transition-[width] duration-150'
+      }`}
+    >
       {/* Brand & Header */}
       <div className="p-3.5 border-b border-slate-800/80 flex items-center justify-between bg-slate-950/40">
         <div className="flex items-center gap-2.5">
@@ -266,6 +321,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ nodeDefs, onAddNode }) => {
           <span>Edit Config:</span>
           <span className="font-mono text-slate-400">Double-Click</span>
         </div>
+      </div>
+      {/* Draggable Resize Handle on right border */}
+      <div
+        onMouseDown={startResizing}
+        onDoubleClick={() => setWidth(288)}
+        title="Drag to resize sidebar (Double-click to reset default width)"
+        className={`absolute -right-1.5 top-0 bottom-0 w-3 cursor-col-resize z-20 group flex items-center justify-center transition-colors ${
+          isResizing ? 'bg-indigo-500/20' : 'hover:bg-indigo-500/10'
+        }`}
+      >
+        <div
+          className={`w-0.5 h-12 rounded-full transition-colors ${
+            isResizing ? 'bg-indigo-400' : 'group-hover:bg-indigo-400/80 bg-transparent'
+          }`}
+        />
       </div>
     </aside>
   );
