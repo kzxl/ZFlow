@@ -71,8 +71,17 @@ const DEFAULT_PORTS: Record<string, { inputs: PortDefinition[]; outputs: PortDef
     outputs: [{ name: 'result', type: 'string', label: 'Result' }]
   },
   memory: {
-    inputs: [],
-    outputs: [{ name: 'chat_history', type: 'array', label: 'History' }]
+    inputs: [
+      { name: 'session_id', type: 'string', label: 'Session ID' },
+      { name: 'user_message', type: 'string', label: 'User Msg' },
+      { name: 'bot_message', type: 'string', label: 'Bot Msg' }
+    ],
+    outputs: [
+      { name: 'chat_history', type: 'array', label: 'History Array' },
+      { name: 'formatted_history', type: 'string', label: 'Formatted Text' },
+      { name: 'turn_count', type: 'number', label: 'Turn Count' },
+      { name: 'summary', type: 'string', label: 'Summary' }
+    ]
   },
   code: {
     inputs: [{ name: 'input_data', type: 'any', label: 'Input Data' }],

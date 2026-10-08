@@ -9,7 +9,8 @@ import {
   MessageSquareCode, 
   CheckCircle, 
   Activity,
-  Terminal
+  Terminal,
+  Database
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -17,6 +18,7 @@ interface HeaderProps {
   onFlowNameChange: (name: string) => void;
   onSave: () => void;
   onResetDefault: () => void;
+  onLoadMemoryFlow?: () => void;
   onClear: () => void;
   onExport: () => void;
   onImport: (content: string) => void;
@@ -31,6 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
   onFlowNameChange,
   onSave,
   onResetDefault,
+  onLoadMemoryFlow,
   onClear,
   onExport,
   onImport,
@@ -80,6 +83,17 @@ export const Header: React.FC<HeaderProps> = ({
           <RotateCcw size={13} />
           <span>Starter Flow</span>
         </button>
+
+        {onLoadMemoryFlow && (
+          <button
+            onClick={onLoadMemoryFlow}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-purple-300 hover:text-white bg-purple-950/40 hover:bg-purple-900/60 border border-purple-800/50 rounded-lg transition-colors"
+            title="Nạp mẫu workflow có bộ nhớ hội thoại SQLite"
+          >
+            <Database size={13} className="text-purple-400" />
+            <span>Memory Flow</span>
+          </button>
+        )}
 
         <button
           onClick={onClear}

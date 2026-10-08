@@ -489,6 +489,19 @@ function FlowCanvas() {
       setFlowName(flow.name || 'Standard Chatbot Flow');
       setNodes(flow.nodes.map(bindNode));
       setEdges(flow.edges || []);
+      setTimeout(() => reactFlowInstance.fitView({ padding: 0.2, duration: 400 }), 100);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleLoadMemoryFlow = async () => {
+    try {
+      const flow = await fetchWorkflow('conversational_memory_flow');
+      setFlowName(flow.name || 'Multi-Turn Memory Chatbot');
+      setNodes(flow.nodes.map(bindNode));
+      setEdges(flow.edges || []);
+      setTimeout(() => reactFlowInstance.fitView({ padding: 0.2, duration: 400 }), 100);
     } catch (err) {
       console.error(err);
     }
@@ -555,6 +568,7 @@ function FlowCanvas() {
         onFlowNameChange={setFlowName}
         onSave={handleSave}
         onResetDefault={handleResetDefault}
+        onLoadMemoryFlow={handleLoadMemoryFlow}
         onClear={handleClear}
         onExport={handleExport}
         onImport={handleImport}

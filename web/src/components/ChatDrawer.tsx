@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   X, 
   Send, 
@@ -10,10 +10,22 @@ import {
   AlertCircle, 
   Cpu, 
   Sparkles, 
-  Clock 
+  Clock,
+  Database,
+  History,
+  Plus,
+  Copy,
+  Check,
+  ChevronDown
 } from 'lucide-react';
 import { ChatMessage, WorkflowDefinition } from '../types/workflow';
-import { streamChatWorkflow } from '../api/client';
+import { 
+  streamChatWorkflow, 
+  fetchMemorySessions, 
+  fetchSessionHistory, 
+  clearSessionMemory, 
+  SessionSummary 
+} from '../api/client';
 
 interface ChatDrawerProps {
   isOpen: boolean;
@@ -39,8 +51,31 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [activeSteps, setActiveSteps] = useState<{ id: string; title: string; status: 'running' | 'completed' | 'error' }[]>([]);
-  const sessionIdRef = useRef<string>(`session_${Date.now()}`);
+  const [currentSessionId, setCurrentSessionId] = useState<string>(() => `sess_${Date.now().toString().slice(-6)}`);
+  const [turnCount, setTurnCount] = useState<number>(0);
+  const [showSessions, setShowSessions] = useState<boolean>(false);
+  const [sessionsList, setSessionsList] = useState<SessionSummary[]>([]);
+  const [copiedSession, setCopiedSession] = useState<boolean>(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const refreshSessions = useCallback(async () => {
+    try {
+      const data = await fetchMemorySessions();
+      setSessionsList(data);
+      const active = data.find((s) => s.session_id === currentSessionId);
+      if (active) {
+        setTurnCount(active.turn_count);
+      }
+    } catch (err) {
+      console.error('Failed to load memory sessions:', err);
+    }
+  }, [currentSessionId]);
+
+  useEffect(() => {
+    if (isOpen) {
+      refreshSessions();
+    }
+  }, [isOpen, refreshSessions]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -49,6 +84,76 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
   useEffect(() => {
     if (isOpen) scrollToBottom();
   }, [isOpen, messages, activeSteps]);
+
+  const handleSelectSession = async (sessId: string) => {
+    setCurrentSessionId(sessId);
+    setShowSessions(false);
+    try {
+      const data = await fetchSessionHistory(sessId);
+      if (data.history && data.history.length > 0) {
+        const loadedMsgs: ChatMessage[] = data.history.map((h, i) => ({
+          id: `hist_${i}_${h.timestamp || Date.now()}`,
+          role: h.role === 'assistant' ? 'assistant' : 'user',
+          content: h.content,
+          timestamp: h.timestamp ? h.timestamp * 1000 : Date.now()
+        }));
+        setMessages(loadedMsgs);
+        setTurnCount(data.stats?.turn_count || data.history.length);
+      } else {
+        setMessages([
+          {
+            id: 'msg_empty',
+            role: 'assistant',
+            content: `Cuộc hội thoại '${sessId}' chưa có tin nhắn nào. Hãy gửi câu hỏi đầu tiên!`,
+            timestamp: Date.now()
+          }
+        ]);
+        setTurnCount(0);
+      }
+    } catch (err) {
+      console.error('Failed to fetch session history:', err);
+    }
+  };
+
+  const handleNewSession = () => {
+    const newId = `sess_${Date.now().toString().slice(-6)}`;
+    setCurrentSessionId(newId);
+    setMessages([
+      {
+        id: `welcome_${Date.now()}`,
+        role: 'assistant',
+        content: `Đã khởi tạo phiên trò chuyện mới: #${newId}. Ngữ cảnh bộ nhớ độc lập sẵn sàng!`,
+        timestamp: Date.now()
+      }
+    ]);
+    setTurnCount(0);
+    setShowSessions(false);
+    setActiveSteps([]);
+  };
+
+  const handleClearCurrentSession = async () => {
+    try {
+      await clearSessionMemory(currentSessionId);
+      setMessages([
+        {
+          id: `cleared_${Date.now()}`,
+          role: 'assistant',
+          content: `Đã xóa sạch bộ nhớ SQLite của phiên #${currentSessionId}.`,
+          timestamp: Date.now()
+        }
+      ]);
+      setTurnCount(0);
+      refreshSessions();
+    } catch (err) {
+      console.error('Failed to clear session:', err);
+    }
+  };
+
+  const handleCopySessionId = () => {
+    navigator.clipboard.writeText(currentSessionId);
+    setCopiedSession(true);
+    setTimeout(() => setCopiedSession(false), 1500);
+  };
 
   const handleSendMessage = async () => {
     if (!input.trim() || isStreaming) return;
@@ -80,7 +185,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
 
     let assistantContent = '';
 
-    await streamChatWorkflow(workflow, userQuery, sessionIdRef.current, {
+    await streamChatWorkflow(workflow, userQuery, currentSessionId, {
       onNodeStart: (data) => {
         onNodeStatusChange(data.node_id, 'running');
         setActiveSteps((prev) => {
@@ -125,6 +230,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
             )
           );
         }
+        // Auto-refresh memory stats
+        setTimeout(() => refreshSessions(), 300);
       },
 
       onError: (err) => {
@@ -140,46 +247,125 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
     });
   };
 
-  const clearChat = () => {
-    setMessages([]);
-    sessionIdRef.current = `session_${Date.now()}`;
-    setActiveSteps([]);
-  };
-
   if (!isOpen) return null;
 
   return (
-    <aside className="w-[420px] bg-[#0c0f17] border-l border-slate-800/80 flex flex-col h-full select-none z-30 shadow-2xl animate-in slide-in-from-right duration-200">
+    <aside className="w-[440px] bg-[#0c0f17] border-l border-slate-800/80 flex flex-col h-full select-none z-30 shadow-2xl animate-in slide-in-from-right duration-200">
       {/* Drawer Header */}
-      <div className="p-4 border-b border-slate-800/80 flex items-center justify-between bg-slate-950/60">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 rounded-xl bg-indigo-500/20 text-indigo-400">
-            <Sparkles size={18} />
+      <div className="p-3.5 border-b border-slate-800/80 bg-slate-950/70 flex flex-col gap-2.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-indigo-500/20 text-indigo-400">
+              <Sparkles size={18} />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-slate-100 flex items-center gap-1.5">
+                Chat Playground
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              </h2>
+              <p className="text-[11px] text-slate-400">Live multi-turn conversation simulator</p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-sm font-semibold text-slate-100 flex items-center gap-1.5">
-              Live Chat Simulator
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            </h2>
-            <p className="text-[11px] text-slate-400">Testing active node graph in real-time</p>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handleNewSession}
+              className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-1 text-[11px]"
+              title="Khởi tạo phiên hội thoại mới"
+            >
+              <Plus size={15} />
+            </button>
+            <button
+              onClick={handleClearCurrentSession}
+              className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors"
+              title="Xóa bộ nhớ phiên này"
+            >
+              <Trash2 size={15} />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+            >
+              <X size={17} />
+            </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-1">
-          <button
-            onClick={clearChat}
-            className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors"
-            title="Reset conversation"
-          >
-            <Trash2 size={16} />
-          </button>
-          <button
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
-          >
-            <X size={18} />
-          </button>
+        {/* Conversation Session Memory Bar */}
+        <div className="flex items-center justify-between px-2.5 py-1.5 bg-slate-900/80 border border-slate-800 rounded-xl text-[11px]">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowSessions(!showSessions)}
+              className="flex items-center gap-1.5 text-slate-300 hover:text-white font-mono bg-slate-800/70 hover:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-700/60 transition-colors"
+              title="Danh sách phiên hội thoại"
+            >
+              <History size={12} className="text-purple-400" />
+              <span>#{currentSessionId}</span>
+              <ChevronDown size={11} className={`text-slate-400 transition-transform ${showSessions ? 'rotate-180' : ''}`} />
+            </button>
+
+            <button
+              onClick={handleCopySessionId}
+              className="text-slate-500 hover:text-slate-300 p-0.5"
+              title="Sao chép Session ID"
+            >
+              {copiedSession ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-[11px] font-medium">
+            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-300 font-mono">
+              <Database size={10} className="text-purple-400" />
+              {turnCount} lượt nhớ
+            </span>
+          </div>
         </div>
+
+        {/* Sessions Dropdown Modal / List */}
+        {showSessions && (
+          <div className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 shadow-2xl space-y-1.5 max-h-[220px] overflow-y-auto animate-in fade-in duration-100">
+            <div className="flex items-center justify-between pb-1 border-b border-slate-800/80 text-[10px] text-slate-400 font-medium">
+              <span>CÁC PHIÊN HỘI THOẠI TRONG SQLITE</span>
+              <button
+                onClick={handleNewSession}
+                className="text-indigo-400 hover:text-indigo-300 flex items-center gap-0.5"
+              >
+                <Plus size={10} /> Tạo mới
+              </button>
+            </div>
+            {sessionsList.length === 0 ? (
+              <p className="text-[11px] text-slate-500 py-2 text-center">Chưa có phiên lưu trữ nào.</p>
+            ) : (
+              sessionsList.map((s) => (
+                <div
+                  key={s.session_id}
+                  onClick={() => handleSelectSession(s.session_id)}
+                  className={`p-2 rounded-lg cursor-pointer border text-left transition-colors flex items-center justify-between ${
+                    s.session_id === currentSessionId
+                      ? 'bg-indigo-600/20 border-indigo-500/50 text-indigo-200'
+                      : 'bg-slate-900/60 border-slate-800/80 hover:bg-slate-800/60 text-slate-300'
+                  }`}
+                >
+                  <div className="overflow-hidden pr-2">
+                    <div className="flex items-center gap-1.5 font-mono text-[11px]">
+                      <span className="font-semibold text-slate-100">#{s.session_id}</span>
+                      <span className="text-[10px] text-purple-400">({s.turn_count} turns)</span>
+                    </div>
+                    {s.last_message && (
+                      <p className="text-[10px] text-slate-400 truncate mt-0.5">
+                        {s.last_role === 'assistant' ? '🤖 ' : '👤 '}
+                        {s.last_message}
+                      </p>
+                    )}
+                  </div>
+                  <span className="text-[9px] text-slate-500 shrink-0 font-mono">
+                    {new Date(s.last_updated * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
 
       {/* Realtime Graph Execution Progress Bar */}

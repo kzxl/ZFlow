@@ -16,8 +16,12 @@ dist/
 # Logs and databases
 *.log
 *.sqlite3
+*.db
 storage/*.json
 !storage/default_flow.json
+!storage/conversational_memory_flow.json
+!server/storage/default_flow.json
+!server/storage/conversational_memory_flow.json
 
 # IDE
 .vscode/

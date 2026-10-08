@@ -118,3 +118,43 @@ export async function streamChatWorkflow(
     callbacks.onError?.(error);
   }
 }
+
+export interface SessionSummary {
+  session_id: string;
+  turn_count: number;
+  last_updated: number;
+  last_message?: string;
+  last_role?: string;
+}
+
+export interface SessionStats {
+  session_id: string;
+  turn_count: number;
+  user_turns: number;
+  assistant_turns: number;
+  total_chars: number;
+  estimated_tokens: number;
+  last_updated: number;
+}
+
+export async function fetchMemorySessions(): Promise<SessionSummary[]> {
+  const res = await fetch(`${BASE_URL}/api/memory/sessions`);
+  if (!res.ok) throw new Error(`Failed to fetch sessions: ${res.statusText}`);
+  const data = await res.json();
+  return data.sessions || [];
+}
+
+export async function fetchSessionHistory(
+  sessionId: string
+): Promise<{ session_id: string; stats: SessionStats; history: Array<{ role: string; content: string; timestamp: number }> }> {
+  const res = await fetch(`${BASE_URL}/api/memory/sessions/${encodeURIComponent(sessionId)}`);
+  if (!res.ok) throw new Error(`Failed to fetch session history: ${res.statusText}`);
+  return await res.json();
+}
+
+export async function clearSessionMemory(sessionId: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/memory/sessions/${encodeURIComponent(sessionId)}`, {
+    method: 'DELETE'
+  });
+  if (!res.ok) throw new Error(`Failed to clear session: ${res.statusText}`);
+}

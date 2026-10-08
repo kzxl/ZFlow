@@ -19,6 +19,7 @@ import uuid
 from engine.graph import WorkflowGraph
 from engine.context import ExecutionContext
 from engine.runner import WorkflowRunner
+from engine.memory_store import memory_store
 from nodes.base import NodeRegistry
 import nodes # trigger registration of all nodes
 
@@ -140,6 +141,7 @@ async def save_workflow(payload: WorkflowPayload):
 async def run_workflow_batch(request: RunRequest):
     """
     Runs the workflow in non-streaming batch mode.
+    Auto-persists dialogue turn to SQLite session memory.
     """
     graph = WorkflowGraph.from_dict(request.workflow)
     variables = request.variables.copy()
@@ -149,6 +151,13 @@ async def run_workflow_batch(request: RunRequest):
     runner = WorkflowRunner()
     
     result = await runner.run(graph, context)
+    
+    bot_reply = result.get("final_output") or context.get_variable("reply") or context.get_variable("final_output")
+    if request.input:
+        memory_store.append_message(context.session_id, "user", request.input)
+    if bot_reply:
+        memory_store.append_message(context.session_id, "assistant", str(bot_reply))
+
     return result
 
 
@@ -157,6 +166,7 @@ async def chat_stream(request: RunRequest):
     """
     Runs the workflow with Server-Sent Events (SSE) streaming for real-time chat interactions.
     Yields tokens, node transitions, and completion payloads.
+    Auto-persists dialogue turn to SQLite session memory upon completion.
     """
     graph = WorkflowGraph.from_dict(request.workflow)
     variables = request.variables.copy()
@@ -166,11 +176,28 @@ async def chat_stream(request: RunRequest):
     runner = WorkflowRunner()
 
     async def event_generator():
+        bot_tokens = []
+        final_output = None
         try:
             async for sse_event in runner.run_stream(graph, context):
                 event_name = sse_event.get("event", "message")
-                data_str = json.dumps(sse_event.get("data", {}), ensure_ascii=False)
+                data = sse_event.get("data", {})
+                
+                if event_name == "token":
+                    bot_tokens.append(data.get("token", ""))
+                elif event_name == "workflow_complete":
+                    final_output = data.get("final_output")
+
+                data_str = json.dumps(data, ensure_ascii=False)
                 yield f"event: {event_name}\ndata: {data_str}\n\n"
+
+            # Auto-save conversation turn upon successful stream
+            bot_reply = final_output or "".join(bot_tokens) or context.get_variable("reply") or context.get_variable("final_output")
+            if request.input:
+                memory_store.append_message(context.session_id, "user", request.input)
+            if bot_reply:
+                memory_store.append_message(context.session_id, "assistant", str(bot_reply))
+
         except Exception as e:
             err_data = json.dumps({"error": str(e)})
             yield f"event: error\ndata: {err_data}\n\n"
@@ -224,6 +251,12 @@ async def trigger_flow_api(
     final_output = result.get("final_output")
     custom_reply = context.get_variable("reply") or final_output
 
+    user_q = initial_vars.get("input")
+    if user_q:
+        memory_store.append_message(session_id, "user", str(user_q))
+    if custom_reply:
+        memory_store.append_message(session_id, "assistant", str(custom_reply))
+
     return {
         "status": "success",
         "flow_id": flow_id,
@@ -264,11 +297,29 @@ async def trigger_flow_stream_api(
     runner = WorkflowRunner()
 
     async def event_generator():
+        bot_tokens = []
+        final_output = None
         try:
             async for sse_event in runner.run_stream(graph, context):
                 event_name = sse_event.get("event", "message")
-                data_str = json.dumps(sse_event.get("data", {}), ensure_ascii=False)
+                data = sse_event.get("data", {})
+                
+                if event_name == "token":
+                    bot_tokens.append(data.get("token", ""))
+                elif event_name == "workflow_complete":
+                    final_output = data.get("final_output")
+
+                data_str = json.dumps(data, ensure_ascii=False)
                 yield f"event: {event_name}\ndata: {data_str}\n\n"
+
+            # Auto-save conversation turn upon successful stream
+            bot_reply = final_output or "".join(bot_tokens) or context.get_variable("reply") or context.get_variable("final_output")
+            user_q = initial_vars.get("input")
+            if user_q:
+                memory_store.append_message(session_id, "user", str(user_q))
+            if bot_reply:
+                memory_store.append_message(session_id, "assistant", str(bot_reply))
+
         except Exception as e:
             err_data = json.dumps({"error": str(e)})
             yield f"event: error\ndata: {err_data}\n\n"
@@ -282,6 +333,58 @@ async def trigger_flow_stream_api(
             "X-Accel-Buffering": "no"
         }
     )
+
+
+# =========================================================================
+# 🧠 Conversation Memory & SQLite Store REST Endpoints
+# =========================================================================
+
+@app.get("/api/memory/sessions")
+async def list_memory_sessions():
+    """
+    Returns list of all conversation sessions stored in SQLite with stats and message previews.
+    """
+    return {"sessions": memory_store.list_sessions()}
+
+
+@app.get("/api/memory/sessions/{session_id}")
+async def get_session_history(session_id: str):
+    """
+    Retrieves chronological dialogue history and statistics for a specific session.
+    """
+    history = memory_store.get_history(session_id)
+    stats = memory_store.get_session_stats(session_id)
+    return {
+        "session_id": session_id,
+        "stats": stats,
+        "history": history
+    }
+
+
+@app.delete("/api/memory/sessions/{session_id}")
+async def clear_session_memory(session_id: str):
+    """
+    Clears all persistent conversation turns for a session from SQLite.
+    """
+    memory_store.clear_session(session_id)
+    return {"status": "cleared", "session_id": session_id}
+
+
+@app.post("/api/memory/sessions/{session_id}/clear")
+async def clear_session_memory_post(session_id: str):
+    """
+    Alternative POST endpoint for clearing session memory.
+    """
+    memory_store.clear_session(session_id)
+    return {"status": "cleared", "session_id": session_id}
+
+
+@app.get("/api/memory/sessions/{session_id}/stats")
+async def get_session_stats_endpoint(session_id: str):
+    """
+    Retrieves turn counts, estimated tokens, and message breakdown for a session.
+    """
+    return memory_store.get_session_stats(session_id)
 
 
 @app.get("/api/v1/flows/{flow_id}/schema")
