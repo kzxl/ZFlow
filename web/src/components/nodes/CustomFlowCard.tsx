@@ -13,7 +13,9 @@ import {
   Settings2, 
   CheckCircle2, 
   AlertCircle, 
-  Loader2 
+  Loader2,
+  Copy,
+  Trash2
 } from 'lucide-react';
 import { CustomNodeData, NodeMetadata, PortDefinition } from '../../types/workflow';
 
@@ -108,14 +110,55 @@ export const CustomFlowCard: React.FC<CustomFlowCardProps> = ({ id, type, data, 
 
   return (
     <div
-      className={`w-[270px] rounded-xl border bg-[#0d101a] backdrop-blur-md shadow-2xl transition-all duration-150 select-none ${
-        selected ? 'ring-2 ring-indigo-500 shadow-indigo-500/20' : 'hover:border-slate-600/80'
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        data.openConfigModal?.();
+      }}
+      className={`relative w-[270px] rounded-xl border bg-[#0d101a] backdrop-blur-md shadow-2xl transition-all duration-150 select-none ${
+        selected ? 'ring-2 ring-indigo-500 shadow-[0_0_25px_rgba(99,102,241,0.35)] scale-[1.01]' : 'hover:border-slate-600/80'
       } ${
         status === 'running' ? '!border-amber-500/90 shadow-amber-500/25 ring-1 ring-amber-500' :
         status === 'completed' ? '!border-emerald-500/80' :
         status === 'error' ? '!border-rose-500/90 ring-1 ring-rose-500' : color.border
       }`}
     >
+      {/* Floating Action Toolbar on Selected Node */}
+      {selected && (
+        <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-[#121626]/95 border border-indigo-500/50 rounded-lg p-1 shadow-2xl backdrop-blur-md z-50 animate-in fade-in zoom-in-95 duration-100">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              data.openConfigModal?.();
+            }}
+            className="p-1 rounded text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+            title="Configure Node (or double-click)"
+          >
+            <Settings2 size={13} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              data.onDuplicate?.();
+            }}
+            className="p-1 rounded text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+            title="Duplicate Node"
+          >
+            <Copy size={13} />
+          </button>
+          <div className="w-px h-3 bg-slate-700 mx-0.5" />
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              data.onDelete?.();
+            }}
+            className="p-1 rounded text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 transition-colors"
+            title="Delete Node"
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+      )}
+
       {/* Node Header */}
       <div className={`flex items-center justify-between px-3.5 py-2.5 rounded-t-xl border-b border-slate-800/80 ${color.bg}`}>
         <div className="flex items-center gap-2.5">

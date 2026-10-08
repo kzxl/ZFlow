@@ -54,6 +54,68 @@ function FlowCanvas() {
   const reactFlowInstance = useReactFlow();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
 
+  const handleOpenConfigModal = useCallback((nodeId: string, nodeTitle: string, nodeType: string, config: any) => {
+    setModalState({
+      isOpen: true,
+      nodeId,
+      nodeTitle: nodeTitle || nodeType,
+      nodeConfig: config || {},
+      nodeType
+    });
+  }, []);
+
+  const handleDeleteNode = useCallback((nodeId: string) => {
+    setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+    setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+  }, [setNodes, setEdges]);
+
+  const handleDuplicateNode = useCallback((nodeId: string) => {
+    setNodes((nds) => {
+      const target = nds.find((n) => n.id === nodeId);
+      if (!target) return nds;
+
+      const newId = `node_${target.type}_${Date.now().toString().slice(-4)}`;
+      const title = `${target.data?.title || target.type} (Copy)`;
+      const config = { ...(target.data?.config || {}) };
+
+      const duplicatedNode: Node<CustomNodeData> = {
+        ...target,
+        id: newId,
+        position: {
+          x: target.position.x + 30,
+          y: target.position.y + 30
+        },
+        selected: true,
+        data: {
+          ...target.data,
+          title,
+          config,
+          openConfigModal: () => handleOpenConfigModal(newId, title, target.type || 'base', config),
+          onDuplicate: () => handleDuplicateNode(newId),
+          onDelete: () => handleDeleteNode(newId)
+        }
+      };
+
+      return [...nds.map((n) => ({ ...n, selected: false })), duplicatedNode];
+    });
+  }, [handleOpenConfigModal, handleDeleteNode, setNodes]);
+
+  const bindNode = useCallback((n: any): Node<CustomNodeData> => {
+    const title = n.title || n.data?.title || n.type;
+    const config = n.data?.config || {};
+    return {
+      ...n,
+      data: {
+        ...n.data,
+        title,
+        config,
+        openConfigModal: () => handleOpenConfigModal(n.id, title, n.type, config),
+        onDuplicate: () => handleDuplicateNode(n.id),
+        onDelete: () => handleDeleteNode(n.id)
+      }
+    };
+  }, [handleOpenConfigModal, handleDuplicateNode, handleDeleteNode]);
+
   // Load node definitions & initial default workflow
   useEffect(() => {
     async function init() {
@@ -64,15 +126,7 @@ function FlowCanvas() {
         const flow = await fetchWorkflow(DEFAULT_FLOW_ID);
         if (flow) {
           setFlowName(flow.name || 'Standard Chatbot Flow');
-          setNodes(
-            flow.nodes.map((n: any) => ({
-              ...n,
-              data: {
-                ...n.data,
-                openConfigModal: () => handleOpenConfigModal(n.id, n.title || n.data?.title, n.type, n.data?.config)
-              }
-            }))
-          );
+          setNodes(flow.nodes.map(bindNode));
           setEdges(flow.edges || []);
         }
       } catch (err) {
@@ -80,17 +134,7 @@ function FlowCanvas() {
       }
     }
     init();
-  }, []);
-
-  const handleOpenConfigModal = useCallback((nodeId: string, nodeTitle: string, nodeType: string, config: any) => {
-    setModalState({
-      isOpen: true,
-      nodeId,
-      nodeTitle: nodeTitle || nodeType,
-      nodeConfig: config || {},
-      nodeType
-    });
-  }, []);
+  }, [bindNode]);
 
   const handleSaveNodeConfig = useCallback((nodeId: string, newTitle: string, newConfig: Record<string, any>) => {
     setNodes((nds) =>
@@ -142,20 +186,19 @@ function FlowCanvas() {
       }
 
       const newNodeId = `node_${type}_${Date.now().toString().slice(-4)}`;
-      const newNode: Node<CustomNodeData> = {
+      const newNode: Node<CustomNodeData> = bindNode({
         id: newNodeId,
         type: type,
         position,
         data: {
           title: meta?.name || type,
-          config: defaultConfig,
-          openConfigModal: () => handleOpenConfigModal(newNodeId, meta?.name || type, type, defaultConfig)
+          config: defaultConfig
         }
-      };
+      });
 
       setNodes((nds) => nds.concat(newNode));
     },
-    [nodeDefs, reactFlowInstance, handleOpenConfigModal, setNodes]
+    [nodeDefs, reactFlowInstance, bindNode, setNodes]
   );
 
   // Add node by clicking palette
@@ -170,20 +213,19 @@ function FlowCanvas() {
       }
 
       const newNodeId = `node_${type}_${Date.now().toString().slice(-4)}`;
-      const newNode: Node<CustomNodeData> = {
+      const newNode: Node<CustomNodeData> = bindNode({
         id: newNodeId,
         type: type,
         position: { x: 300 + Math.random() * 100, y: 200 + Math.random() * 100 },
         data: {
           title: meta?.name || type,
-          config: defaultConfig,
-          openConfigModal: () => handleOpenConfigModal(newNodeId, meta?.name || type, type, defaultConfig)
+          config: defaultConfig
         }
-      };
+      });
 
       setNodes((nds) => nds.concat(newNode));
     },
-    [nodeDefs, handleOpenConfigModal, setNodes]
+    [nodeDefs, bindNode, setNodes]
   );
 
   // Custom node types generator
@@ -246,15 +288,7 @@ function FlowCanvas() {
     try {
       const flow = await fetchWorkflow(DEFAULT_FLOW_ID);
       setFlowName(flow.name || 'Standard Chatbot Flow');
-      setNodes(
-        flow.nodes.map((n: any) => ({
-          ...n,
-          data: {
-            ...n.data,
-            openConfigModal: () => handleOpenConfigModal(n.id, n.title || n.data?.title, n.type, n.data?.config)
-          }
-        }))
-      );
+      setNodes(flow.nodes.map(bindNode));
       setEdges(flow.edges || []);
     } catch (err) {
       console.error(err);
@@ -284,15 +318,7 @@ function FlowCanvas() {
       const parsed = JSON.parse(content);
       if (parsed.nodes && parsed.edges) {
         setFlowName(parsed.name || 'Imported Workflow');
-        setNodes(
-          parsed.nodes.map((n: any) => ({
-            ...n,
-            data: {
-              ...n.data,
-              openConfigModal: () => handleOpenConfigModal(n.id, n.title || n.data?.title, n.type, n.data?.config)
-            }
-          }))
-        );
+        setNodes(parsed.nodes.map(bindNode));
         setEdges(parsed.edges);
       }
     } catch (e) {

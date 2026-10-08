@@ -37,6 +37,8 @@ export interface CustomNodeData extends Record<string, unknown> {
   executionTimeMs?: number;
   onConfigChange?: (config: Record<string, any>) => void;
   openConfigModal?: () => void;
+  onDuplicate?: () => void;
+  onDelete?: () => void;
   [key: string]: unknown;
 }
 
