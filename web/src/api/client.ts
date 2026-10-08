@@ -177,3 +177,35 @@ export async function clearSessionMemory(sessionId: string): Promise<void> {
   });
   if (!res.ok) throw new Error(`Failed to clear session: ${res.statusText}`);
 }
+
+export interface EnchantPromptPayload {
+  prompt: string;
+  enchant_level?: string;
+  style?: string;
+  lighting?: string;
+  camera?: string;
+  atmosphere?: string;
+  artist?: string;
+  extra_boosters?: string;
+  enable_subject_detailing?: boolean;
+}
+
+export interface EnchantPromptResponse {
+  original_prompt: string;
+  enchanted_prompt: string;
+  negative_prompt: string;
+  detected_subject: string;
+  enchant_level: string;
+  added_traits: string[];
+}
+
+export async function enchantPromptApi(payload: EnchantPromptPayload): Promise<EnchantPromptResponse> {
+  const res = await fetch(`${BASE_URL}/api/enchant-prompt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error(`Failed to enchant prompt: ${res.statusText}`);
+  return await res.json();
+}
+

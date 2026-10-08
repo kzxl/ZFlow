@@ -641,6 +641,39 @@ async def get_flow_io_schema(flow_id: str = Path(...)):
     }
 
 
+class EnchantPromptRequest(BaseModel):
+    prompt: str = Field(..., description="Base concept or prompt")
+    enchant_level: Optional[str] = "vivid"
+    style: Optional[str] = "cinematic"
+    lighting: Optional[str] = "dramatic"
+    camera: Optional[str] = "none"
+    atmosphere: Optional[str] = "none"
+    artist: Optional[str] = "none"
+    extra_boosters: Optional[str] = ""
+    enable_subject_detailing: Optional[bool] = True
+
+
+@app.post("/api/enchant-prompt")
+async def api_enchant_prompt(payload: EnchantPromptRequest):
+    """
+    Enchants and expands a simple concept into an ultra-detailed diffusion prompt.
+    """
+    from nodes.prompt_styler_node import enchant_prompt
+    result = enchant_prompt(
+        base_prompt=payload.prompt,
+        enchant_level=payload.enchant_level or "vivid",
+        style=payload.style or "cinematic",
+        lighting=payload.lighting or "dramatic",
+        camera=payload.camera or "none",
+        atmosphere=payload.atmosphere or "none",
+        artist=payload.artist or "none",
+        extra_boosters=payload.extra_boosters or "",
+        enable_subject_detailing=payload.enable_subject_detailing if payload.enable_subject_detailing is not None else True
+    )
+    return result
+
+
+
 # Mount static build from web/dist if present for seamless single-server deployment
 DIST_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "web", "dist"))
 if os.path.exists(DIST_DIR):

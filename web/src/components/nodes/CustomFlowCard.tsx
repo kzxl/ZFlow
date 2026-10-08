@@ -421,15 +421,57 @@ export const CustomFlowCard: React.FC<CustomFlowCardProps> = ({ id, type, data, 
         )}
 
         {type === 'prompt_styler' && (
-          <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 flex flex-col gap-1 text-slate-400">
-            <div className="flex justify-between">
-              <span>Style:</span>
-              <span className="font-mono text-amber-300 font-semibold capitalize">{data.config?.style || 'cinematic'}</span>
+          <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/60 flex flex-col gap-1.5 text-slate-400">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-slate-400">Enchant Level:</span>
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 ${
+                data.config?.enchant_level === 'masterpiece_epic' 
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' 
+                  : data.config?.enchant_level === 'ai_magic_rewrite'
+                  ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                  : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
+              }`}>
+                <Sparkles size={10} />
+                {data.config?.enchant_level === 'masterpiece_epic' ? 'Epic 8K' :
+                 data.config?.enchant_level === 'ai_magic_rewrite' ? 'AI Magic' :
+                 data.config?.enchant_level || 'Vivid'}
+              </span>
             </div>
+            
             <div className="flex justify-between text-[10px]">
-              <span>Lighting:</span>
-              <span className="font-mono text-slate-400">{data.config?.lighting || 'dramatic'}</span>
+              <span>Style & Light:</span>
+              <span className="font-mono text-slate-200 truncate max-w-[140px]">
+                {data.config?.style || 'cinematic'} • {data.config?.lighting || 'dramatic'}
+              </span>
             </div>
+
+            {data.config?.atmosphere && data.config.atmosphere !== 'none' && (
+              <div className="flex justify-between text-[10px]">
+                <span>Atmosphere:</span>
+                <span className="font-mono text-cyan-300 truncate max-w-[140px]">
+                  {data.config.atmosphere.replace('_', ' ')}
+                </span>
+              </div>
+            )}
+
+            {/* Enchanted Prompt Output Preview */}
+            {(data.lastOutput?.positive_prompt || data.lastOutput?.styled_prompt) && (
+              <div className="mt-1 pt-1.5 border-t border-slate-800/80">
+                <div className="flex items-center justify-between text-[9px] text-slate-500 mb-0.5">
+                  <span className="flex items-center gap-1 text-pink-400 font-semibold">
+                    <Sparkles size={9} /> Enchanted Output
+                  </span>
+                  {data.lastOutput?.detected_subject && (
+                    <span className="px-1 py-0.2 bg-slate-800 text-slate-300 rounded font-mono">
+                      #{data.lastOutput.detected_subject}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-300 italic line-clamp-2 leading-tight bg-black/40 p-1.5 rounded border border-slate-800/60 font-mono">
+                  "{data.lastOutput?.positive_prompt || data.lastOutput?.styled_prompt}"
+                </p>
+              </div>
+            )}
           </div>
         )}
 

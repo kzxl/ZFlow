@@ -24,7 +24,8 @@ import {
   FileText,
   FileJson,
   ExternalLink,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Wand2
 } from 'lucide-react';
 import { ChatMessage, WorkflowDefinition, ExecutionBenchmark } from '../types/workflow';
 import { 
@@ -32,6 +33,7 @@ import {
   fetchMemorySessions, 
   fetchSessionHistory, 
   clearSessionMemory, 
+  enchantPromptApi,
   SessionSummary 
 } from '../api/client';
 
@@ -68,7 +70,32 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
   const [sessionsList, setSessionsList] = useState<SessionSummary[]>([]);
   const [copiedSession, setCopiedSession] = useState<boolean>(false);
   const [expandedTraceMsgId, setExpandedTraceMsgId] = useState<string | null>(null);
+  const [isEnchanting, setIsEnchanting] = useState<boolean>(false);
+  const [enchantToast, setEnchantToast] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const handleMagicEnchantPrompt = async () => {
+    if (!input.trim() || isEnchanting) return;
+    setIsEnchanting(true);
+    try {
+      const res = await enchantPromptApi({
+        prompt: input.trim(),
+        enchant_level: 'masterpiece_epic',
+        style: 'cinematic',
+        lighting: 'dramatic',
+        atmosphere: 'volumetric_rays',
+        camera: 'anamorphic'
+      });
+      setInput(res.enchanted_prompt);
+      setEnchantToast(`✨ Phù phép Prompt (+${res.added_traits.length} chi tiết, #${res.detected_subject})!`);
+      setTimeout(() => setEnchantToast(null), 3500);
+    } catch (err: any) {
+      setEnchantToast(`⚠️ Không thể enchant: ${err.message || String(err)}`);
+      setTimeout(() => setEnchantToast(null), 3000);
+    } finally {
+      setIsEnchanting(false);
+    }
+  };
 
   // Sync session ID to localStorage
   useEffect(() => {
@@ -793,7 +820,12 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
       </div>
 
       {/* Input Box */}
-      <div className="p-3 border-t border-slate-800/80 bg-slate-950/60">
+      <div className="p-3 border-t border-slate-800/80 bg-slate-950/60 relative">
+        {enchantToast && (
+          <div className="absolute -top-7 left-3 right-3 text-[10px] text-pink-300 bg-pink-950/90 border border-pink-500/40 rounded-lg px-2.5 py-1 backdrop-blur-md shadow-lg truncate animate-in fade-in slide-in-from-bottom-1 duration-150">
+            {enchantToast}
+          </div>
+        )}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -809,6 +841,15 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
             onChange={(e) => setInput(e.target.value)}
             className="flex-1 px-3.5 py-2 bg-slate-900 border border-slate-700/80 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
           />
+          <button
+            type="button"
+            onClick={handleMagicEnchantPrompt}
+            disabled={isStreaming || isEnchanting || !input.trim()}
+            className="p-2 bg-pink-600/20 hover:bg-pink-600/30 text-pink-400 hover:text-pink-300 border border-pink-500/40 disabled:opacity-30 disabled:pointer-events-none rounded-xl transition-all shrink-0"
+            title="✨ Phù phép Enchant Prompt siêu chi tiết (ComfyUI / Midjourney / 8K)"
+          >
+            {isEnchanting ? <Loader2 size={16} className="animate-spin text-pink-400" /> : <Wand2 size={16} />}
+          </button>
           <button
             type="submit"
             disabled={isStreaming || !input.trim()}

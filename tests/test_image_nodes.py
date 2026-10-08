@@ -79,6 +79,56 @@ class TestImageNodes(unittest.IsolatedAsyncioTestCase):
         self.assertIn("neon", out_cyber["styled_prompt"].lower())
         print("✓ PromptStyler multiple style presets verified.")
 
+    async def test_prompt_enchant_character_epic(self):
+        styler = PromptStylerNode()
+        ctx = ExecutionContext(session_id="enchant_char_test")
+        
+        output = await styler.execute(
+            inputs={"base_prompt": "Cô gái samurai đứng dưới mưa hoa anh đào"},
+            config={
+                "enchant_level": "masterpiece_epic",
+                "style": "cinematic",
+                "lighting": "dramatic",
+                "atmosphere": "floating_particles",
+                "artist": "artgerm",
+                "camera": "anamorphic",
+                "enable_subject_detailing": True
+            },
+            context=ctx
+        )
+        
+        styled = output["styled_prompt"]
+        self.assertEqual(output["detected_subject"], "character")
+        self.assertEqual(output["enchant_level"], "masterpiece_epic")
+        self.assertIn("skin micro-texture", styled.lower())
+        self.assertIn("unreal engine 5", styled.lower())
+        self.assertIn("artgerm", styled.lower())
+        self.assertIn("anamorphic", styled.lower())
+        self.assertTrue(len(output["added_traits"]) >= 5)
+        print("✓ Prompt Enchant (Epic Character) verified:\n ", styled[:180], "...")
+
+    async def test_prompt_enchant_animal_and_nature(self):
+        styler = PromptStylerNode()
+        ctx = ExecutionContext(session_id="enchant_animal_test")
+        
+        output = await styler.execute(
+            inputs={"base_prompt": "Chú mèo con ngủ trên ban công đầy nắng"},
+            config={
+                "enchant_level": "vivid",
+                "style": "watercolor",
+                "lighting": "golden_hour",
+                "atmosphere": "golden_twilight"
+            },
+            context=ctx
+        )
+        
+        styled = output["styled_prompt"]
+        self.assertEqual(output["detected_subject"], "animal")
+        self.assertIn("fur", styled.lower())
+        self.assertIn("watercolor", styled.lower())
+        self.assertIn("golden hour", styled.lower())
+        print("✓ Prompt Enchant (Animal & Golden Twilight) verified.")
+
     async def test_image_gen_pollinations_flux(self):
         image_gen = ImageGenNode()
         ctx = ExecutionContext(session_id="image_gen_test")
