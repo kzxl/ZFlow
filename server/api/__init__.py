@@ -8,6 +8,7 @@ from .memory import router as memory_router
 from .knowledge import router as knowledge_router
 from .public_flows import router as public_flows_router
 from .system import router as system_router
+from .settings import router as settings_router
 
 __all__ = [
     "workflows_router",
@@ -15,5 +16,6 @@ __all__ = [
     "memory_router",
     "knowledge_router",
     "public_flows_router",
-    "system_router"
+    "system_router",
+    "settings_router"
 ]

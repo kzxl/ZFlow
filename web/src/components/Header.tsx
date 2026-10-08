@@ -14,7 +14,8 @@ import {
   FolderOpen,
   ChevronDown,
   Check,
-  Plus
+  Plus,
+  Settings
 } from 'lucide-react';
 import { WorkflowSummary } from '../api/client';
 
@@ -33,6 +34,7 @@ interface HeaderProps {
   onExport: () => void;
   onImport: (content: string) => void;
   onOpenApiModal: () => void;
+  onOpenSettings?: () => void;
   isChatOpen: boolean;
   onToggleChat: () => void;
   isSaving?: boolean;
@@ -54,6 +56,7 @@ export const Header: React.FC<HeaderProps> = ({
   onExport,
   onImport,
   onOpenApiModal,
+  onOpenSettings,
   isChatOpen,
   onToggleChat,
   isSaving,
@@ -238,6 +241,17 @@ export const Header: React.FC<HeaderProps> = ({
           <Terminal size={13} />
           <span>API Trigger</span>
         </button>
+
+        {onOpenSettings && (
+          <button
+            onClick={onOpenSettings}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg shadow-sm transition-colors"
+            title="Cài đặt hệ thống, API Keys và Active Flow"
+          >
+            <Settings size={13} className="text-indigo-400" />
+            <span>Cài đặt</span>
+          </button>
+        )}
 
         <div className="h-4 w-px bg-slate-800 mx-1"></div>
 

@@ -10,6 +10,7 @@ import httpx
 import os
 from nodes.base import BaseNode, PortDef, NodeRegistry
 from engine.context import ExecutionContext
+from engine.settings_manager import settings_manager
 
 @NodeRegistry.register
 class LlmNode(BaseNode):
@@ -146,15 +147,18 @@ class LlmNode(BaseNode):
         system_prompt = inputs.get("system_prompt") or context.get_variable("system_prompt", "You are a helpful AI assistant.")
         history = inputs.get("chat_history") or context.chat_history or []
 
+        global_openai_key = settings_manager.get("openai_api_key", "")
+        api_key = config.get("api_key") or global_openai_key or os.environ.get("OPENAI_API_KEY", "")
+
         # If provider is simulator or no api key for openai, run realistic simulator
-        if provider == "simulator" or (provider == "openai_compatible" and not config.get("api_key") and not os.environ.get("OPENAI_API_KEY")):
+        if provider == "simulator" or (provider == "openai_compatible" and not api_key):
             async for chunk in self._stream_simulator(prompt, system_prompt, config):
                 yield chunk
             return
 
         # Real API streaming (OpenAI / Ollama / vLLM)
-        api_base = config.get("api_base", "https://api.openai.com/v1").rstrip("/")
-        api_key = config.get("api_key") or os.environ.get("OPENAI_API_KEY", "")
+        default_base = settings_manager.get("ollama_base_url") if provider == "ollama" else "https://api.openai.com/v1"
+        api_base = (config.get("api_base") or default_base).rstrip("/")
         
         selected_model = config.get("model", "gpt-4o-mini")
         model = config.get("custom_model") if selected_model == "custom" and config.get("custom_model") else selected_model

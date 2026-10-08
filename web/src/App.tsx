@@ -20,6 +20,7 @@ import { Sidebar } from './components/Sidebar';
 import { ChatDrawer } from './components/ChatDrawer';
 import { NodeConfigModal } from './components/NodeConfigModal';
 import { ApiModal } from './components/ApiModal';
+import { SettingsModal } from './components/SettingsModal';
 import { ContextMenu } from './components/ContextMenu';
 import { CustomFlowCard } from './components/nodes/CustomFlowCard';
 
@@ -39,6 +40,7 @@ function FlowCanvas() {
   const [flowName, setFlowName] = useState('Standard Chatbot Flow');
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isApiModalOpen, setIsApiModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSavedSuccess, setIsSavedSuccess] = useState(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
@@ -648,6 +650,7 @@ function FlowCanvas() {
         onExport={handleExport}
         onImport={handleImport}
         onOpenApiModal={() => setIsApiModalOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
         isChatOpen={isChatOpen}
         onToggleChat={() => setIsChatOpen(!isChatOpen)}
         isSaving={isSaving}
@@ -714,6 +717,18 @@ function FlowCanvas() {
         onClose={() => setIsApiModalOpen(false)}
         flowId={currentFlowId}
         flowName={flowName}
+      />
+
+      {/* Global System Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        savedWorkflows={savedWorkflows}
+        onActiveFlowChanged={(newId) => {
+          handleSelectWorkflow(newId);
+          setToastMessage({ text: `✓ Đã chuyển đổi Active Workflow sang #${newId}`, type: 'success' });
+          setTimeout(() => setToastMessage(null), 3000);
+        }}
       />
 
       {/* Right-click Context Menu */}
