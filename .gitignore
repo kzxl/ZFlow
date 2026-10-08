@@ -1,0 +1,26 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Node / Web dependencies
+node_modules/
+dist/
+.vite/
+
+# Logs and databases
+*.log
+*.sqlite3
+storage/*.json
+!storage/default_flow.json
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user

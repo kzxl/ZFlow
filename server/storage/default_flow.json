@@ -1,0 +1,83 @@
+{
+  "id": "starter_chatbot_flow",
+  "name": "Standard Conversational AI Pipeline",
+  "description": "Standard multi-stage chatbot pipeline: User Input -> Prompt Interpolation -> LLM Generation -> Chat Response Output.",
+  "nodes": [
+    {
+      "id": "node_input",
+      "type": "input",
+      "title": "User Query Input",
+      "position": { "x": 100, "y": 200 },
+      "data": {
+        "title": "User Query Input",
+        "config": {
+          "default_query": "Xin chào! Bạn có thể giới thiệu về kiến trúc của ZFlow không?"
+        }
+      }
+    },
+    {
+      "id": "node_prompt",
+      "type": "prompt",
+      "title": "Prompt Template",
+      "position": { "x": 450, "y": 180 },
+      "data": {
+        "title": "Prompt Template",
+        "config": {
+          "system_template": "Bạn là chuyên gia kiến trúc phần mềm thuộc hệ sinh thái ZeroUniverse, phản hồi súc tích, chuyên nghiệp và chính xác.",
+          "user_template": "Câu hỏi từ người dùng:\n{query}"
+        }
+      }
+    },
+    {
+      "id": "node_llm",
+      "type": "llm",
+      "title": "LLM Inference Engine",
+      "position": { "x": 800, "y": 180 },
+      "data": {
+        "title": "LLM Inference Engine",
+        "config": {
+          "provider": "simulator",
+          "model": "gpt-4o-mini",
+          "temperature": 0.7,
+          "max_tokens": 1024
+        }
+      }
+    },
+    {
+      "id": "node_output",
+      "type": "output",
+      "title": "Chatbot Response",
+      "position": { "x": 1150, "y": 200 },
+      "data": {
+        "title": "Chatbot Response",
+        "config": {
+          "prefix": "",
+          "suffix": ""
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-input-prompt",
+      "source": "node_input",
+      "target": "node_prompt",
+      "sourceHandle": "query",
+      "targetHandle": "input_text"
+    },
+    {
+      "id": "edge-prompt-llm",
+      "source": "node_prompt",
+      "target": "node_llm",
+      "sourceHandle": "prompt",
+      "targetHandle": "prompt"
+    },
+    {
+      "id": "edge-llm-output",
+      "source": "node_llm",
+      "target": "node_output",
+      "sourceHandle": "text",
+      "targetHandle": "response_text"
+    }
+  ]
+}
