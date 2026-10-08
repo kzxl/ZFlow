@@ -139,7 +139,7 @@ class WorkflowRunner:
                 outgoing_edges = graph.get_outgoing_edges(node_id)
                 for edge in outgoing_edges:
                     # If current node is a router, check handle matching
-                    if node_type == "router":
+                    if node_type in ("router", "llm_router"):
                         active_branch = collected_output.get("active_branch")
                         if active_branch:
                             if edge.source_handle and edge.source_handle != active_branch:

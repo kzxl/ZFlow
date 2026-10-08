@@ -10,6 +10,7 @@ import {
   Send, 
   Code2,
   Globe,
+  GitFork,
   Settings2, 
   CheckCircle2, 
   AlertCircle, 
@@ -35,6 +36,7 @@ const ICONS: Record<string, React.ElementType> = {
   FileText,
   Sparkles,
   GitBranch,
+  GitFork,
   Wrench,
   Database,
   Send,
@@ -135,6 +137,40 @@ export const CustomFlowCard: React.FC<CustomFlowCardProps> = ({ id, type, data, 
         name: 'default_branch',
         type: 'string',
         label: data.config?.default_label || 'Default / Else'
+      }
+    ];
+  }
+
+  if (type === 'llm_router') {
+    let routes = [];
+    if (typeof data.config?.routes === 'string') {
+      try {
+        routes = JSON.parse(data.config.routes);
+      } catch {
+        routes = [];
+      }
+    } else if (Array.isArray(data.config?.routes)) {
+      routes = data.config.routes;
+    }
+
+    if (!routes || routes.length === 0) {
+      routes = [
+        { id: 'sales', name: 'Tư vấn Bán hàng' },
+        { id: 'technical_support', name: 'Hỗ trợ Kỹ thuật' },
+        { id: 'general_faq', name: 'Hỏi đáp Chung' }
+      ];
+    }
+
+    outputs = [
+      ...routes.map((r: any, idx: number) => ({
+        name: r.id || `route_${idx + 1}`,
+        type: 'string',
+        label: r.name || r.id || `Nhánh ${idx + 1}`
+      })),
+      {
+        name: data.config?.fallback_branch || 'default_branch',
+        type: 'string',
+        label: 'Khác / Fallback'
       }
     ];
   }

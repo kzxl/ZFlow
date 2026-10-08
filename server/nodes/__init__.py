@@ -8,6 +8,7 @@ from .memory_node import MemoryNode
 from .output_node import OutputNode
 from .code_node import CodeNode
 from .http_node import HttpNode
+from .llm_router_node import LlmRouterNode
 
 __all__ = [
     "BaseNode",
@@ -17,6 +18,7 @@ __all__ = [
     "PromptNode",
     "LlmNode",
     "RouterNode",
+    "LlmRouterNode",
     "ToolNode",
     "MemoryNode",
     "OutputNode",
