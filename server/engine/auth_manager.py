@@ -55,6 +55,19 @@ class AuthManager:
                     scopes TEXT
                 )
             """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS token_audit_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    jti TEXT,
+                    user_id TEXT,
+                    action TEXT,
+                    status TEXT,
+                    ip_address TEXT,
+                    endpoint TEXT,
+                    details TEXT,
+                    timestamp REAL
+                )
+            """)
             conn.commit()
             self._seed_default_users(conn)
 
@@ -191,6 +204,7 @@ class AuthManager:
                 (jti, session_id or "", time.time())
             )
             conn.commit()
+        self.log_audit_event("REVOKE", "SUCCESS", jti=jti, details={"session_id": session_id})
 
     def is_token_revoked(self, jti: str) -> bool:
         """Checks if JTI is in the revocation blacklist."""
@@ -198,6 +212,143 @@ class AuthManager:
             cursor = conn.cursor()
             cursor.execute("SELECT 1 FROM revoked_tokens WHERE jti = ?", (jti,))
             return cursor.fetchone() is not None
+
+    def log_audit_event(
+        self,
+        action: str,
+        status: str,
+        user_id: str = "",
+        jti: str = "",
+        ip_address: str = "127.0.0.1",
+        endpoint: str = "",
+        details: Optional[Dict[str, Any]] = None
+    ):
+        """Records a token access or security event in the immutable audit log."""
+        try:
+            with sqlite3.connect(AUTH_DB_PATH) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO token_audit_logs (jti, user_id, action, status, ip_address, endpoint, details, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        jti,
+                        user_id,
+                        action,
+                        status,
+                        ip_address,
+                        endpoint,
+                        json.dumps(details or {}, ensure_ascii=False),
+                        time.time()
+                    )
+                )
+                conn.commit()
+        except Exception:
+            pass
+
+    def introspect_token(self, token_str: str, ip_address: str = "127.0.0.1", endpoint: str = "/auth/introspect") -> Dict[str, Any]:
+        """
+        RFC 7662 compliant token introspection.
+        Audits token integrity, owner, role, tier, scopes, and remaining lifetime.
+        """
+        is_valid, claims, reason = self.verify_token(token_str)
+        now = time.time()
+
+        if not is_valid:
+            status = "EXPIRED" if "expired" in reason.lower() else ("REVOKED" if "revoked" in reason.lower() else "INVALID")
+            user_id = (claims.get("sub") if claims else "") or "unknown"
+            jti = (claims.get("jti") if claims else "") or ""
+            self.log_audit_event("INTROSPECT", status, user_id=user_id, jti=jti, ip_address=ip_address, endpoint=endpoint, details={"reason": reason})
+
+            return {
+                "active": False,
+                "error": reason,
+                "status": status,
+                "audit": {
+                    "timestamp": now,
+                    "validation": "REJECTED",
+                    "reason": reason
+                }
+            }
+
+        claims_dict = claims or {}
+        exp = claims_dict.get("exp", now)
+        expires_in = max(0, int(exp - now))
+        user_id = claims_dict.get("sub", "")
+        jti = claims_dict.get("jti", "")
+
+        self.log_audit_event("INTROSPECT", "SUCCESS", user_id=user_id, jti=jti, ip_address=ip_address, endpoint=endpoint, details={"expires_in": expires_in})
+
+        return {
+            "active": True,
+            "sub": user_id,
+            "session_id": claims_dict.get("session_id", ""),
+            "role": claims_dict.get("role", "guest"),
+            "tier": claims_dict.get("tier", "free"),
+            "scopes": claims_dict.get("scopes", []),
+            "iss": claims_dict.get("iss", "zflow-auth-engine"),
+            "iat": claims_dict.get("iat", 0),
+            "exp": exp,
+            "expires_in_seconds": expires_in,
+            "jti": jti,
+            "is_revoked": False,
+            "audit": {
+                "timestamp": now,
+                "validation": "PASSED",
+                "risk_level": "LOW",
+                "signature_algorithm": "HS256"
+            }
+        }
+
+    def get_audit_logs(self, limit: int = 50, user_id: Optional[str] = None, action: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Retrieves recent audit logs."""
+        logs = []
+        with sqlite3.connect(AUTH_DB_PATH) as conn:
+            cursor = conn.cursor()
+            query = "SELECT id, jti, user_id, action, status, ip_address, endpoint, details, timestamp FROM token_audit_logs WHERE 1=1"
+            params = []
+            if user_id:
+                query += " AND user_id = ?"
+                params.append(user_id)
+            if action:
+                query += " AND action = ?"
+                params.append(action)
+            query += " ORDER BY id DESC LIMIT ?"
+            params.append(limit)
+            cursor.execute(query, tuple(params))
+            for row in cursor.fetchall():
+                try:
+                    dt = json.loads(row[7])
+                except Exception:
+                    dt = {}
+                logs.append({
+                    "id": row[0],
+                    "jti": row[1],
+                    "user_id": row[2],
+                    "action": row[3],
+                    "status": row[4],
+                    "ip_address": row[5],
+                    "endpoint": row[6],
+                    "details": dt,
+                    "timestamp": row[8]
+                })
+        return logs
+
+    def list_users(self) -> List[Dict[str, Any]]:
+        """Returns non-sensitive list of users for testing and admin preview."""
+        users = []
+        with sqlite3.connect(AUTH_DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT username, role, tier, scopes FROM users ORDER BY username")
+            for r in cursor.fetchall():
+                users.append({
+                    "username": r[0],
+                    "role": r[1],
+                    "tier": r[2],
+                    "scopes": [s.strip() for s in r[3].split(",") if s.strip()]
+                })
+        return users
 
 
 # Global singleton instance

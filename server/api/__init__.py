@@ -9,6 +9,7 @@ from .knowledge import router as knowledge_router
 from .public_flows import router as public_flows_router
 from .system import router as system_router
 from .settings import router as settings_router
+from .auth import router as auth_router
 
 __all__ = [
     "workflows_router",
@@ -17,5 +18,6 @@ __all__ = [
     "knowledge_router",
     "public_flows_router",
     "system_router",
-    "settings_router"
+    "settings_router",
+    "auth_router"
 ]

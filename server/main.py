@@ -18,7 +18,8 @@ from api import (
     knowledge_router,
     public_flows_router,
     system_router,
-    settings_router
+    settings_router,
+    auth_router
 )
 
 app = FastAPI(
@@ -44,6 +45,7 @@ app.include_router(memory_router)
 app.include_router(knowledge_router)
 app.include_router(public_flows_router)
 app.include_router(settings_router)
+app.include_router(auth_router)
 
 # Mount static build from web/dist if present for seamless single-server deployment
 DIST_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "web", "dist"))

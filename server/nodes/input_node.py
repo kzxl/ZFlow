@@ -19,6 +19,7 @@ class InputNode(BaseNode):
     outputs = [
         PortDef(name="query", data_type="string", label="User Query", description="The text input sent by the user"),
         PortDef(name="session_id", data_type="string", label="Session ID", description="Unique conversation session key"),
+        PortDef(name="access_token", data_type="string", label="Access Token (JWT)", description="Bearer access token passed via request headers or parameters"),
         PortDef(name="timestamp", data_type="number", label="Timestamp", description="Epoch timestamp of the request")
     ]
 
@@ -45,8 +46,18 @@ class InputNode(BaseNode):
         context.append_chat(role="user", content=query)
         context.set_variable("user_query", query)
         
+        # Extract access_token if present in context or headers
+        access_token = (
+            context.get_variable("access_token")
+            or context.get_variable("token")
+            or str(context.get_variable("webhook_headers", {}).get("authorization", "")).replace("Bearer ", "").strip()
+            or ""
+        )
+        context.set_variable("access_token", access_token)
+
         return {
             "query": query,
             "session_id": context.session_id,
+            "access_token": access_token,
             "timestamp": time.time()
         }

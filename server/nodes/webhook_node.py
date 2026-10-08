@@ -20,7 +20,8 @@ class WebhookTriggerNode(BaseNode):
         PortDef(name="payload", data_type="object", label="Webhook Body"),
         PortDef(name="headers", data_type="object", label="HTTP Headers"),
         PortDef(name="event", data_type="string", label="Event Name"),
-        PortDef(name="query", data_type="string", label="Normalized Query")
+        PortDef(name="query", data_type="string", label="Normalized Query"),
+        PortDef(name="access_token", data_type="string", label="Access Token (JWT)")
     ]
 
     config_schema = {
@@ -65,12 +66,23 @@ class WebhookTriggerNode(BaseNode):
         if not query:
             query = str(payload) if payload else "Incoming webhook trigger"
 
+        # Extract access token from headers or payload
+        auth_header = headers.get("authorization") or headers.get("Authorization") or ""
+        access_token = ""
+        if "Bearer " in auth_header:
+            access_token = auth_header.replace("Bearer ", "").strip()
+        elif isinstance(payload, dict):
+            access_token = payload.get("access_token") or payload.get("token") or ""
+        if not access_token:
+            access_token = context.get_variable("access_token") or context.get_variable("token") or ""
+
         # Sync to context variables for downstream nodes
         context.set_variable("input", query)
         context.set_variable("query", query)
         context.set_variable("webhook_payload", payload)
         context.set_variable("webhook_headers", headers)
         context.set_variable("webhook_event", event)
+        context.set_variable("access_token", access_token)
 
         context.log("info", f"Webhook trigger processed event: '{event}', hook_id: '{config.get('hook_id')}'")
 
@@ -78,7 +90,8 @@ class WebhookTriggerNode(BaseNode):
             "payload": payload,
             "headers": headers,
             "event": str(event),
-            "query": str(query)
+            "query": str(query),
+            "access_token": access_token
         }
 
     async def execute_stream(
