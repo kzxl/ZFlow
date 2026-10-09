@@ -35,6 +35,15 @@ export interface CustomNodeData extends Record<string, unknown> {
   status?: 'idle' | 'running' | 'completed' | 'error';
   lastOutput?: Record<string, any>;
   executionTimeMs?: number;
+  telemetry?: {
+    node_id: string;
+    in_flight: number;
+    total_completed: number;
+    total_errors: number;
+    avg_duration_ms: number;
+    p95_duration_ms: number;
+    heat_status: 'idle' | 'normal' | 'busy' | 'congested' | 'error';
+  };
   onConfigChange?: (config: Record<string, any>) => void;
   openConfigModal?: () => void;
   onDuplicate?: () => void;

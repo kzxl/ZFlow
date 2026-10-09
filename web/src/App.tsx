@@ -23,9 +23,18 @@ import { ApiModal } from './components/ApiModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ContextMenu } from './components/ContextMenu';
 import { CustomFlowCard } from './components/nodes/CustomFlowCard';
+import { TelemetryDrawer } from './components/TelemetryDrawer';
 
 import { NodeMetadata, WorkflowDefinition, CustomNodeData, ContextMenuState } from './types/workflow';
-import { fetchNodeDefinitions, fetchWorkflow, saveWorkflow, listWorkflows, WorkflowSummary } from './api/client';
+import { 
+  fetchNodeDefinitions, 
+  fetchWorkflow, 
+  saveWorkflow, 
+  listWorkflows, 
+  WorkflowSummary,
+  subscribeTelemetryStream,
+  TelemetrySnapshot
+} from './api/client';
 
 const DEFAULT_FLOW_ID = 'starter_chatbot_flow';
 
@@ -44,6 +53,11 @@ function FlowCanvas() {
   const [isSaving, setIsSaving] = useState(false);
   const [isSavedSuccess, setIsSavedSuccess] = useState(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  // Live Telemetry states
+  const [isTelemetryEnabled, setIsTelemetryEnabled] = useState<boolean>(true);
+  const [isTelemetryDrawerOpen, setIsTelemetryDrawerOpen] = useState<boolean>(false);
+  const [telemetrySnapshot, setTelemetrySnapshot] = useState<TelemetrySnapshot | null>(null);
 
   // Context Menu state
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
@@ -631,6 +645,56 @@ function FlowCanvas() {
     [setNodes]
   );
 
+  // Real-time Traffic Telemetry & Observability Subscription
+  useEffect(() => {
+    if (!isTelemetryEnabled) return;
+
+    const unsubscribe = subscribeTelemetryStream(
+      currentFlowId,
+      (snap) => {
+        setTelemetrySnapshot(snap);
+
+        // 1. Update nodes with their specific telemetry counters
+        setNodes((prevNodes) =>
+          prevNodes.map((n) => {
+            const nodeTelem = snap.nodes[n.id];
+            if (!nodeTelem && !n.data.telemetry) return n;
+            return {
+              ...n,
+              data: {
+                ...n.data,
+                telemetry: nodeTelem || undefined
+              }
+            };
+          })
+        );
+
+        // 2. Animate edges flowing from active nodes
+        setEdges((prevEdges) =>
+          prevEdges.map((e) => {
+            const srcTelem = snap.nodes[e.source];
+            const isFlowing = !!(srcTelem && srcTelem.in_flight > 0);
+            if (e.animated === isFlowing) return e;
+            return {
+              ...e,
+              animated: isFlowing,
+              style: isFlowing
+                ? { stroke: srcTelem?.heat_status === 'congested' ? '#f43f5e' : '#34d399', strokeWidth: 2.5 }
+                : undefined
+            };
+          })
+        );
+      },
+      (err) => {
+        console.debug('Telemetry SSE disconnected, retrying...', err);
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [isTelemetryEnabled, currentFlowId, setNodes, setEdges]);
+
   const selectedMeta = nodeDefs.find((d) => d.type === modalState.nodeType);
 
   return (
@@ -655,6 +719,10 @@ function FlowCanvas() {
         onToggleChat={() => setIsChatOpen(!isChatOpen)}
         isSaving={isSaving}
         isSavedSuccess={isSavedSuccess}
+        isTelemetryEnabled={isTelemetryEnabled}
+        onToggleTelemetry={() => setIsTelemetryEnabled((prev) => !prev)}
+        onOpenTelemetryDrawer={() => setIsTelemetryDrawerOpen(true)}
+        telemetrySnapshot={telemetrySnapshot}
       />
 
       <div className="flex flex-1 relative overflow-hidden">
@@ -729,6 +797,14 @@ function FlowCanvas() {
           setToastMessage({ text: `✓ Đã chuyển đổi Active Workflow sang #${newId}`, type: 'success' });
           setTimeout(() => setToastMessage(null), 3000);
         }}
+      />
+
+      {/* Live Telemetry & Concurrency Observability Drawer */}
+      <TelemetryDrawer
+        isOpen={isTelemetryDrawerOpen}
+        onClose={() => setIsTelemetryDrawerOpen(false)}
+        snapshot={telemetrySnapshot}
+        onReset={() => setTelemetrySnapshot(null)}
       />
 
       {/* Right-click Context Menu */}

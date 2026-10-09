@@ -209,3 +209,73 @@ export async function enchantPromptApi(payload: EnchantPromptPayload): Promise<E
   return await res.json();
 }
 
+export interface NodeTelemetryData {
+  node_id: string;
+  in_flight: number;
+  total_completed: number;
+  total_errors: number;
+  avg_duration_ms: number;
+  p95_duration_ms: number;
+  heat_status: 'idle' | 'normal' | 'busy' | 'congested' | 'error';
+}
+
+export interface ActiveRequestInfo {
+  session_id: string;
+  flow_id: string;
+  user_id: string;
+  current_node_id: string;
+  elapsed_seconds: number;
+}
+
+export interface TelemetrySnapshot {
+  timestamp: number;
+  total_in_flight: number;
+  workflow_in_flight: number;
+  current_rps: number;
+  p95_latency_ms: number;
+  error_rate_pct: number;
+  total_completed: number;
+  total_failed: number;
+  nodes: Record<string, NodeTelemetryData>;
+  active_requests_count: number;
+  active_requests: ActiveRequestInfo[];
+}
+
+export async function fetchTelemetrySnapshot(flowId?: string): Promise<TelemetrySnapshot> {
+  const url = flowId ? `${BASE_URL}/api/v1/telemetry/snapshot?flow_id=${encodeURIComponent(flowId)}` : `${BASE_URL}/api/v1/telemetry/snapshot`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch telemetry snapshot: ${res.statusText}`);
+  return await res.json();
+}
+
+export function subscribeTelemetryStream(
+  flowId?: string,
+  onMessage?: (snap: TelemetrySnapshot) => void,
+  onError?: (err: any) => void
+): () => void {
+  const url = flowId ? `${BASE_URL}/api/v1/telemetry/live?flow_id=${encodeURIComponent(flowId)}` : `${BASE_URL}/api/v1/telemetry/live`;
+  const es = new EventSource(url);
+
+  es.addEventListener('telemetry', (event) => {
+    try {
+      const parsed: TelemetrySnapshot = JSON.parse(event.data);
+      if (onMessage) onMessage(parsed);
+    } catch (err) {
+      console.error('Failed to parse telemetry event:', err);
+    }
+  });
+
+  es.onerror = (err) => {
+    if (onError) onError(err);
+  };
+
+  return () => {
+    es.close();
+  };
+}
+
+export async function resetTelemetry(): Promise<void> {
+  await fetch(`${BASE_URL}/api/v1/telemetry/reset`, { method: 'POST' });
+}
+
+

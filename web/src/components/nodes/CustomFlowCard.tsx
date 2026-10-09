@@ -72,13 +72,26 @@ export const CustomFlowCard: React.FC<CustomFlowCardProps> = ({ id, data, type =
   const outputs: PortDefinition[] = metadata?.outputs || defaultPortDef.outputs;
 
   const status = data.status || 'idle';
+  const telemetry = data.telemetry;
+  const inFlightCount = telemetry?.in_flight || 0;
+  const heatStatus = telemetry?.heat_status || 'idle';
+
+  // Dynamic border & glow depending on traffic heat
+  let trafficBorderClass = colors.border;
+  if (heatStatus === 'congested') {
+    trafficBorderClass = 'border-rose-500 shadow-[0_0_22px_rgba(244,63,94,0.45)] ring-2 ring-rose-500/50 animate-pulse';
+  } else if (heatStatus === 'busy') {
+    trafficBorderClass = 'border-amber-400 shadow-[0_0_18px_rgba(251,191,36,0.35)] ring-1 ring-amber-400/40';
+  } else if (inFlightCount > 0) {
+    trafficBorderClass = 'border-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.35)] ring-1 ring-emerald-400/40';
+  }
 
   return (
     <div
       className={`relative rounded-xl border transition-all duration-200 select-none shadow-xl min-w-[240px] max-w-[320px] bg-slate-950/90 backdrop-blur-md ${
         selected
           ? 'border-indigo-500 ring-2 ring-indigo-500/40 shadow-indigo-500/10'
-          : `${colors.border} hover:border-slate-500/60`
+          : `${trafficBorderClass} hover:border-slate-500/60`
       }`}
     >
       {/* Node Header */}
@@ -88,9 +101,16 @@ export const CustomFlowCard: React.FC<CustomFlowCardProps> = ({ id, data, type =
             <IconComponent size={16} />
           </div>
           <div className="overflow-hidden">
-            <h4 className="text-xs font-semibold text-slate-100 truncate tracking-wide">
-              {data.title || metadata?.name || type}
-            </h4>
+            <div className="flex items-center gap-1.5">
+              <h4 className="text-xs font-semibold text-slate-100 truncate tracking-wide">
+                {data.title || metadata?.name || type}
+              </h4>
+              {inFlightCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/50 animate-pulse shrink-0">
+                  🔥 {inFlightCount}
+                </span>
+              )}
+            </div>
             <span className={`text-[9px] uppercase font-mono tracking-wider px-1.5 py-0.2 rounded border ${colors.badge}`}>
               {category}
             </span>
@@ -191,6 +211,18 @@ export const CustomFlowCard: React.FC<CustomFlowCardProps> = ({ id, data, type =
         {data.executionTimeMs !== undefined && (
           <div className="text-[10px] text-right text-slate-500 font-mono pt-1">
             ⚡ {data.executionTimeMs} ms
+          </div>
+        )}
+
+        {telemetry && (telemetry.total_completed > 0 || telemetry.in_flight > 0) && (
+          <div className="pt-1.5 border-t border-slate-800/60 flex items-center justify-between text-[9px] font-mono text-slate-400">
+            <span className="flex items-center gap-1">
+              <span className={`w-1.5 h-1.5 rounded-full ${inFlightCount > 0 ? 'bg-amber-400 animate-ping' : 'bg-emerald-400'}`} />
+              {telemetry.total_completed} finished
+            </span>
+            <span className="text-slate-500">
+              avg {telemetry.avg_duration_ms}ms
+            </span>
           </div>
         )}
       </div>

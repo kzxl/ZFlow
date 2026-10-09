@@ -15,9 +15,11 @@ import {
   ChevronDown,
   Check,
   Plus,
-  Settings
+  Settings,
+  Flame,
+  Radio
 } from 'lucide-react';
-import { WorkflowSummary } from '../api/client';
+import { WorkflowSummary, TelemetrySnapshot } from '../api/client';
 
 interface HeaderProps {
   flowName: string;
@@ -39,6 +41,10 @@ interface HeaderProps {
   onToggleChat: () => void;
   isSaving?: boolean;
   isSavedSuccess?: boolean;
+  isTelemetryEnabled?: boolean;
+  onToggleTelemetry?: () => void;
+  onOpenTelemetryDrawer?: () => void;
+  telemetrySnapshot?: TelemetrySnapshot | null;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -60,10 +66,17 @@ export const Header: React.FC<HeaderProps> = ({
   isChatOpen,
   onToggleChat,
   isSaving,
-  isSavedSuccess
+  isSavedSuccess,
+  isTelemetryEnabled = true,
+  onToggleTelemetry,
+  onOpenTelemetryDrawer,
+  telemetrySnapshot
 }) => {
   const [isFlowDropdownOpen, setIsFlowDropdownOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const totalInFlight = telemetrySnapshot?.total_in_flight || 0;
+  const currentRps = telemetrySnapshot?.current_rps || 0;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -153,6 +166,54 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Toolbar Buttons */}
       <div className="flex items-center gap-2">
+        {/* Live Telemetry Radar HUD */}
+        {onOpenTelemetryDrawer && (
+          <div className="flex items-center rounded-lg bg-slate-900/80 border border-slate-800 p-0.5 text-xs shadow-sm">
+            <button
+              onClick={onOpenTelemetryDrawer}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-all ${
+                isTelemetryEnabled
+                  ? totalInFlight > 0
+                    ? 'bg-amber-950/70 border border-amber-500/50 text-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.3)]'
+                    : 'bg-emerald-950/60 border border-emerald-500/40 text-emerald-300'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="Mở bảng điều khiển kiểm toán Concurrency & Latency Heatmap"
+            >
+              <Activity
+                size={13}
+                className={isTelemetryEnabled ? (totalInFlight > 0 ? 'text-amber-400 animate-spin' : 'text-emerald-400 animate-pulse') : 'text-slate-500'}
+              />
+              <span className="font-semibold text-[11px]">
+                {isTelemetryEnabled ? (
+                  totalInFlight > 0 ? (
+                    <span className="flex items-center gap-1 font-mono">
+                      <Flame size={11} className="text-amber-400" />
+                      {totalInFlight} active • {currentRps} rps
+                    </span>
+                  ) : (
+                    <span>Live Traffic</span>
+                  )
+                ) : (
+                  <span>Radar Tắt</span>
+                )}
+              </span>
+            </button>
+
+            {onToggleTelemetry && (
+              <button
+                onClick={onToggleTelemetry}
+                className={`p-1.5 rounded-md hover:bg-slate-800 transition-colors ${
+                  isTelemetryEnabled ? 'text-emerald-400' : 'text-slate-600'
+                }`}
+                title={isTelemetryEnabled ? "Tạm dừng live stream telemetry" : "Bật live stream telemetry"}
+              >
+                <Radio size={12} className={isTelemetryEnabled ? "animate-pulse" : ""} />
+              </button>
+            )}
+          </div>
+        )}
+
         <button
           onClick={onResetDefault}
           className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg transition-colors"
