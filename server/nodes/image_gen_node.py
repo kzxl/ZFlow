@@ -4,7 +4,7 @@ Generates high-resolution images from text prompts with support for
 cloud diffusion APIs and local ComfyUI WebSocket/REST servers.
 """
 import asyncio
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, AsyncGenerator
 import json
 import os
 import time
@@ -62,6 +62,18 @@ class ImageGenNode(BaseNode):
             "options": ["comfyui_local", "simulator", "dalle3", "flux_pollinations"],
             "default": "comfyui_local"
         },
+        "speed_preset": {
+            "type": "select",
+            "label": "Tốc độ xử lý (Speed Preset)",
+            "options": ["turbo_fast", "balanced", "quality", "custom"],
+            "default": "turbo_fast"
+        },
+        "async_execution_mode": {
+            "type": "select",
+            "label": "Chế độ thực thi (Execution Mode)",
+            "options": ["wait_with_progress", "background_queue"],
+            "default": "wait_with_progress"
+        },
         "comfyui_base_url": {
             "type": "string",
             "label": "ComfyUI Server Address",
@@ -75,8 +87,8 @@ class ImageGenNode(BaseNode):
         },
         "enable_prompt_expansion": {
             "type": "boolean",
-            "label": "Bật LLM Prompt Rewriter (Qwen TextGenerate)",
-            "default": True
+            "label": "Bật LLM Prompt Rewriter (Qwen TextGenerate - tốn thêm 30s)",
+            "default": False
         },
         "steps": {
             "type": "number",
@@ -84,7 +96,7 @@ class ImageGenNode(BaseNode):
             "min": 1,
             "max": 100,
             "step": 1,
-            "default": 25
+            "default": 14
         },
         "cfg_scale": {
             "type": "number",
@@ -148,16 +160,11 @@ class ImageGenNode(BaseNode):
         },
         "timeout_seconds": {
             "type": "number",
-            "label": "ComfyUI Timeout (giây)",
+            "label": "ComfyUI Timeout (giây - tự động gia hạn nếu GPU đang chạy)",
             "min": 30,
-            "max": 600,
-            "step": 10,
-            "default": 240
-        },
-        "fallback_simulator": {
-            "type": "boolean",
-            "label": "Fallback sang Simulator nếu ComfyUI lỗi",
-            "default": False
+            "max": 1800,
+            "step": 30,
+            "default": 600
         },
         "custom_workflow_json": {
             "type": "textarea",
@@ -178,6 +185,45 @@ class ImageGenNode(BaseNode):
     }
 
     async def execute(self, inputs: Dict[str, Any], config: Dict[str, Any], context: ExecutionContext) -> Dict[str, Any]:
+        return await self._execute_core(inputs, config, context, progress_callback=None)
+
+    async def execute_stream(
+        self, inputs: Dict[str, Any], config: Dict[str, Any], context: ExecutionContext
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        progress_queue: asyncio.Queue = asyncio.Queue()
+
+        async def on_progress(msg: str):
+            await progress_queue.put({"type": "token", "token": msg})
+
+        async def worker():
+            try:
+                res = await self._execute_core(inputs, config, context, progress_callback=on_progress)
+                await progress_queue.put({"type": "result", "data": res})
+            except Exception as e:
+                await progress_queue.put({"type": "error", "error": str(e)})
+
+        worker_task = asyncio.create_task(worker())
+
+        while True:
+            item = await progress_queue.get()
+            itype = item.get("type")
+            if itype == "token":
+                yield {"type": "token", "token": item["token"]}
+            elif itype == "result":
+                yield {"type": "result", "data": item["data"]}
+                break
+            elif itype == "error":
+                raise RuntimeError(item["error"])
+
+        await worker_task
+
+    async def _execute_core(
+        self,
+        inputs: Dict[str, Any],
+        config: Dict[str, Any],
+        context: ExecutionContext,
+        progress_callback: Optional[Any] = None
+    ) -> Dict[str, Any]:
         prompt = str(
             inputs.get("prompt")
             or inputs.get("positive_prompt")
@@ -214,12 +260,8 @@ class ImageGenNode(BaseNode):
 
         # 1. DALL-E 3 Mode
         if provider == "dalle3" and api_key:
-            try:
-                image_url, revised_prompt = await self._generate_dalle3(prompt, ratio, config, api_key)
-            except Exception as e:
-                context.log("error", f"DALL-E 3 error: {e}, falling back to High-res Simulator.")
-                image_url = self._generate_simulator(prompt, width, height, seed)
-        # 2. Local ComfyUI Bridge
+            image_url, revised_prompt = await self._generate_dalle3(prompt, ratio, config, api_key)
+        # 2. Local ComfyUI Bridge (Bắt buộc render từ GPU ComfyUI thật, không dùng ảnh ngẫu nhiên)
         elif provider == "comfyui_local":
             base_url = config.get("comfyui_base_url", "http://192.168.10.7:8188")
             try:
@@ -232,35 +274,34 @@ class ImageGenNode(BaseNode):
                     seed=seed,
                     base_url=base_url,
                     config=config,
-                    context=context
+                    context=context,
+                    progress_callback=progress_callback
                 )
             except Exception as e:
                 context.log("error", f"ComfyUI bridge error: {e}")
-                if config.get("fallback_simulator", False):
-                    context.log("warning", "Falling back to High-res Simulator.")
-                    image_url = self._generate_simulator(prompt, width, height, seed)
-                else:
-                    err_msg = f"❌ **Lỗi sinh ảnh ComfyUI ({base_url})**:\n\n`{str(e)}`\n\n*Vui lòng kiểm tra server ComfyUI hoặc chỉnh lại thông số node.*"
-                    return {
-                        "image_url": "",
-                        "markdown_image": err_msg,
-                        "markdown": err_msg,
-                        "revised_prompt": prompt,
-                        "seed": seed,
-                        "aspect_ratio": ratio,
-                        "width": width,
-                        "height": height,
-                        "is_mock": False,
-                        "status": "error",
-                        "error": str(e)
-                    }
-        # 3. Flux / Pollinations AI
+                err_msg = f"❌ **Lỗi sinh ảnh ComfyUI ({base_url})**:\n\n`{str(e)}`\n\n*Vui lòng kiểm tra server ComfyUI hoặc GPU.*"
+                return {
+                    "image_url": "",
+                    "markdown_image": err_msg,
+                    "markdown": err_msg,
+                    "revised_prompt": prompt,
+                    "seed": seed,
+                    "aspect_ratio": ratio,
+                    "width": width,
+                    "height": height,
+                    "is_mock": False,
+                    "status": "error",
+                    "error": str(e)
+                }
+        # 3. Flux / Pollinations AI (Chỉ khi người dùng chọn rõ ràng provider này)
         elif provider == "flux_pollinations":
             encoded_prompt = urllib.parse.quote(prompt)
             image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width={width}&height={height}&seed={seed}&nologo=true&model=flux"
-        # 4. Default Simulator (Fast, reliable, zero-config)
-        else:
+        # 4. Simulator (Chỉ khi người dùng chọn rõ ràng provider là 'simulator')
+        elif provider == "simulator":
             image_url = self._generate_simulator(prompt, width, height, seed)
+        else:
+            raise ValueError(f"Provider '{provider}' không hợp lệ hoặc thiếu cấu hình. Vui lòng cấu hình 'comfyui_local' để render trên ComfyUI.")
 
         # Record in context variables
         context.set_variable("image_url", image_url)
@@ -268,10 +309,15 @@ class ImageGenNode(BaseNode):
         context.set_variable("image_markdown", f"![{prompt[:30]}]({image_url})")
         context.log("info", f"Generated image with seed {seed}: {image_url}")
 
+        if image_url.startswith("⏳"):
+            md_output = image_url
+        else:
+            md_output = f"![Generated Image: {prompt[:30]}]({image_url})"
+
         return {
             "image_url": image_url,
-            "markdown_image": f"![Generated Image: {prompt[:30]}]({image_url})",
-            "markdown": f"![Generated Image: {prompt[:30]}]({image_url})",
+            "markdown_image": md_output,
+            "markdown": md_output,
             "revised_prompt": revised_prompt,
             "seed": seed,
             "aspect_ratio": ratio,
@@ -327,15 +373,23 @@ class ImageGenNode(BaseNode):
         seed: int,
         base_url: str,
         config: Dict[str, Any],
-        context: ExecutionContext
+        context: ExecutionContext,
+        progress_callback: Optional[Any] = None
     ) -> str:
         """
         Communicates with local ComfyUI API (/prompt endpoint) and polls for real output.
         Dynamically adapts to the user's active workflow or falls back to template.
+        Supports realtime WebSocket progress streaming and Turbo speed preset.
         """
         base_url = base_url.rstrip("/")
         workflow_mode = config.get("workflow_mode", "auto_history")
+        speed_preset = config.get("speed_preset", "turbo_fast")
+        async_mode = config.get("async_execution_mode", "wait_with_progress")
+        client_id = f"zflow_{int(time.time() * 1000)}"
         workflow = None
+
+        if progress_callback:
+            await progress_callback(f"🎨 **[ComfyUI] Khởi tạo luồng sinh ảnh ({speed_preset})...**\n")
 
         # 1. Custom workflow from config if selected
         if workflow_mode == "custom_json":
@@ -387,15 +441,39 @@ class ImageGenNode(BaseNode):
                     "9": {"class_type": "SaveImage", "inputs": {"filename_prefix": "ZFlow_Output", "images": ["8", 0]}}
                 }
 
-            # 5. Inject prompt and advanced ComfyUI parameters into workflow
-            steps = int(config.get("steps", 25))
-            cfg = float(config.get("cfg_scale", 1.0))
-            sampler = str(config.get("sampler_name", "euler"))
-            scheduler = str(config.get("scheduler", "simple"))
-            denoise = float(config.get("denoise", 1.0))
-            enable_expansion = bool(config.get("enable_prompt_expansion", True))
+            # 5. Speed preset resolution
+            if speed_preset == "turbo_fast":
+                steps = 12
+                enable_expansion = False  # Bypasses 8B TextGenerate LLM inside ComfyUI, cutting 35s!
+                cfg = 1.0
+                sampler = "euler"
+                scheduler = "simple"
+                denoise = 1.0
+            elif speed_preset == "balanced":
+                steps = 18
+                enable_expansion = False
+                cfg = 1.0
+                sampler = str(config.get("sampler_name", "euler"))
+                scheduler = str(config.get("scheduler", "simple"))
+                denoise = 1.0
+            elif speed_preset == "quality":
+                steps = int(config.get("steps", 25))
+                enable_expansion = True
+                cfg = float(config.get("cfg_scale", 1.0))
+                sampler = str(config.get("sampler_name", "euler"))
+                scheduler = str(config.get("scheduler", "simple"))
+                denoise = float(config.get("denoise", 1.0))
+            else:  # custom
+                steps = int(config.get("steps", 25))
+                enable_expansion = bool(config.get("enable_prompt_expansion", True))
+                cfg = float(config.get("cfg_scale", 1.0))
+                sampler = str(config.get("sampler_name", "euler"))
+                scheduler = str(config.get("scheduler", "simple"))
+                denoise = float(config.get("denoise", 1.0))
+
             res_ratio_str = RESOLUTION_SELECTOR_MAP.get(ratio, "3:2 (Photo)")
 
+            # Inject parameters into workflow nodes
             for nid, node in workflow.items():
                 ctype = node.get("class_type", "")
                 inputs = node.get("inputs", {})
@@ -406,7 +484,6 @@ class ImageGenNode(BaseNode):
                     if "sampling_mode.seed" in inputs:
                         inputs["sampling_mode.seed"] = seed
                 elif ctype == "ComfySwitchNode":
-                    # Controls whether to use TextGenerate (on_true) or bypass to user prompt (on_false)
                     inputs["switch"] = enable_expansion
                     if isinstance(inputs.get("on_false"), str):
                         inputs["on_false"] = prompt
@@ -438,9 +515,10 @@ class ImageGenNode(BaseNode):
                         inputs["height"] = height
 
             # 6. Submit prompt to ComfyUI
+            submit_payload = {"prompt": workflow, "client_id": client_id}
             submit_resp = await client.post(
                 f"{base_url}/prompt",
-                json={"prompt": workflow},
+                json=submit_payload,
                 timeout=15.0
             )
             if submit_resp.status_code != 200:
@@ -451,43 +529,122 @@ class ImageGenNode(BaseNode):
             if not prompt_id:
                 raise RuntimeError(f"ComfyUI did not return prompt_id: {submit_resp.text}")
 
-            context.log("info", f"Submitted prompt to ComfyUI with ID {prompt_id} (steps: {steps}, cfg: {cfg}, sampler: {sampler}), waiting for generation...")
+            context.log("info", f"Submitted prompt to ComfyUI (ID: {prompt_id}, speed: {speed_preset}, steps: {steps}, cfg: {cfg})")
 
-            # 7. Asynchronously poll for completion
-            max_wait_seconds = int(config.get("timeout_seconds", 240))
-            start_time = time.time()
-            poll_interval = 2.0
+            # If background queue mode, return immediately
+            if async_mode == "background_queue":
+                queue_msg = (
+                    f"⏳ **Yêu cầu đã xếp hàng vào ComfyUI!**\n\n"
+                    f"- **Prompt ID**: `{prompt_id}`\n"
+                    f"- **Tốc độ**: `{speed_preset}` ({steps} steps)\n"
+                    f"- **Server**: `{base_url}`\n\n"
+                    f"*Ảnh đang render ngầm trên GPU máy chủ, bạn có thể tiếp tục trò chuyện.*"
+                )
+                if progress_callback:
+                    await progress_callback(queue_msg)
+                return queue_msg
 
-            while time.time() - start_time < max_wait_seconds:
-                await asyncio.sleep(poll_interval)
-                elapsed = int(time.time() - start_time)
+            if progress_callback:
+                expansion_text = "kèm LLM Rewriter" if enable_expansion else "bỏ qua LLM Rewriter (Turbo)"
+                await progress_callback(f"⚡ **[ComfyUI] Bắt đầu render ({steps} steps, {expansion_text})...**\n")
 
+            # 7. Asynchronously poll and listen to WebSocket for realtime progress
+            ws_url = base_url.replace("http://", "ws://").replace("https://", "wss://") + f"/ws?clientId={client_id}"
+            ws_stop_event = asyncio.Event()
+
+            last_activity_time = [time.time()]
+
+            async def ws_progress_listener():
                 try:
-                    check_resp = await client.get(f"{base_url}/history/{prompt_id}", timeout=5.0)
-                    if check_resp.status_code == 200:
-                        h_data = check_resp.json()
-                        if prompt_id in h_data:
-                            entry = h_data[prompt_id]
-                            status = entry.get("status", {})
-                            if status.get("status_str") == "error":
-                                err_details = status.get("messages", [])
-                                raise RuntimeError(f"ComfyUI execution failed: {err_details}")
+                    import aiohttp
+                    async with aiohttp.ClientSession() as session:
+                        async with session.ws_connect(ws_url, timeout=5.0) as ws:
+                            while not ws_stop_event.is_set():
+                                try:
+                                    ws_msg = await ws.receive(timeout=1.5)
+                                    if ws_msg.type == aiohttp.WSMsgType.TEXT:
+                                        msg_data = json.loads(ws_msg.data)
+                                        mtype = msg_data.get("type")
+                                        if mtype == "progress":
+                                            p = msg_data.get("data", {})
+                                            if p.get("prompt_id") == prompt_id:
+                                                v = p.get("value", 0)
+                                                m = p.get("max", 1)
+                                                pct = int((v / max(1, m)) * 100)
+                                                last_activity_time[0] = time.time()
+                                                if progress_callback:
+                                                    await progress_callback(f"\r🔄 [ComfyUI] Khử nhiễu: Bước {v}/{m} ({pct}%)...")
+                                        elif mtype == "executing":
+                                            edata = msg_data.get("data", {})
+                                            if edata.get("prompt_id") == prompt_id:
+                                                nid = edata.get("node")
+                                                last_activity_time[0] = time.time()
+                                                if nid and progress_callback:
+                                                    await progress_callback(f"\n⚡ Đang thực thi Node: `{nid}`...")
+                                    elif ws_msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.ERROR):
+                                        break
+                                except asyncio.TimeoutError:
+                                    continue
+                except Exception:
+                    pass
 
-                            outputs = entry.get("outputs", {})
-                            for out_nid, out_val in outputs.items():
-                                if "images" in out_val and len(out_val["images"]) > 0:
-                                    img_info = out_val["images"][0]
-                                    fname = img_info["filename"]
-                                    subf = img_info.get("subfolder", "")
-                                    img_type = img_info.get("type", "temp")
-                                    image_url = f"{base_url}/view?filename={urllib.parse.quote(fname)}&subfolder={urllib.parse.quote(subf)}&type={urllib.parse.quote(img_type)}"
-                                    context.log("info", f"ComfyUI generation completed in {elapsed}s: {image_url}")
-                                    return image_url
+            ws_task = asyncio.create_task(ws_progress_listener())
 
-                    context.log("info", f"ComfyUI generating... ({elapsed}s)")
-                except Exception as poll_err:
-                    if "ComfyUI execution failed" in str(poll_err):
-                        raise
-                    # Ignore transient network issues during polling
+            max_wait_seconds = int(config.get("timeout_seconds", 600))
+            start_time = time.time()
+            poll_interval = 1.5
 
-            raise TimeoutError(f"ComfyUI generation timed out after {max_wait_seconds}s for prompt {prompt_id}")
+            try:
+                while time.time() - start_time < max_wait_seconds:
+                    await asyncio.sleep(poll_interval)
+                    elapsed = int(time.time() - start_time)
+
+                    if progress_callback and (time.time() - last_activity_time[0] >= 3.0):
+                        last_activity_time[0] = time.time()
+                        await progress_callback(f"⏳ [ComfyUI] Đang xử lý trên máy chủ... ({elapsed}s)\n")
+
+                    try:
+                        # 1. Kiểm tra lịch sử hoàn tất
+                        check_resp = await client.get(f"{base_url}/history/{prompt_id}", timeout=5.0)
+                        if check_resp.status_code == 200:
+                            h_data = check_resp.json()
+                            if prompt_id in h_data:
+                                entry = h_data[prompt_id]
+                                status_info = entry.get("status", {})
+                                if status_info.get("status_str") == "error":
+                                    err_details = status_info.get("messages", [])
+                                    raise RuntimeError(f"ComfyUI execution failed: {err_details}")
+
+                                outputs = entry.get("outputs", {})
+                                for out_nid, out_val in outputs.items():
+                                    if "images" in out_val and len(out_val["images"]) > 0:
+                                        img_info = out_val["images"][0]
+                                        fname = img_info["filename"]
+                                        subf = img_info.get("subfolder", "")
+                                        img_type = img_info.get("type", "temp")
+                                        image_url = f"{base_url}/view?filename={urllib.parse.quote(fname)}&subfolder={urllib.parse.quote(subf)}&type={urllib.parse.quote(img_type)}"
+                                        context.log("info", f"ComfyUI generation completed in {elapsed}s: {image_url}")
+                                        if progress_callback:
+                                            await progress_callback(f"\n✨ **Hoàn tất render trong {elapsed}s!**\n")
+                                        return image_url
+
+                        # 2. Kiểm tra hàng đợi ComfyUI: Nếu task vẫn đang running hoặc pending trên GPU, gia hạn timeout
+                        queue_resp = await client.get(f"{base_url}/queue", timeout=5.0)
+                        if queue_resp.status_code == 200:
+                            q_data = queue_resp.json()
+                            running_items = q_data.get("queue_running", [])
+                            pending_items = q_data.get("queue_pending", [])
+                            is_running = any(len(item) > 1 and item[1] == prompt_id for item in running_items)
+                            is_pending = any(len(item) > 1 and item[1] == prompt_id for item in pending_items)
+                            if is_running or is_pending:
+                                if elapsed > max_wait_seconds - 60:
+                                    max_wait_seconds += 120
+
+                    except Exception as poll_err:
+                        if "ComfyUI execution failed" in str(poll_err):
+                            raise
+
+                raise TimeoutError(f"ComfyUI generation timed out after {max_wait_seconds}s for prompt {prompt_id}. Server: {base_url}")
+            finally:
+                ws_stop_event.set()
+                ws_task.cancel()

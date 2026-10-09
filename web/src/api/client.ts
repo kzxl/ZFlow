@@ -124,6 +124,9 @@ export async function streamChatWorkflow(
               case 'workflow_complete':
                 callbacks.onWorkflowComplete?.(parsedData);
                 break;
+              case 'error':
+                callbacks.onError?.(new Error(parsedData.error || 'Lỗi thực thi server'));
+                break;
               default:
                 break;
             }

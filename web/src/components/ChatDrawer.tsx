@@ -502,7 +502,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
           nodes: data.benchmarks?.nodes || []
         };
 
-        const finalContent = (data.final_output && !assistantContent) ? data.final_output : assistantContent;
+        const finalContent = data.final_output || assistantContent;
 
         setMessages((prev) =>
           prev.map((msg) =>
@@ -525,7 +525,12 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === assistantMsgId
-              ? { ...msg, content: `⚠️ Lỗi thực thi Workflow: ${err.message || String(err)}` }
+              ? {
+                  ...msg,
+                  content: assistantContent
+                    ? `${assistantContent}\n\n⚠️ *(Gián đoạn kết nối: ${err.message || String(err)})*`
+                    : `⚠️ Lỗi thực thi Workflow: ${err.message || String(err)}`
+                }
               : msg
           )
         );

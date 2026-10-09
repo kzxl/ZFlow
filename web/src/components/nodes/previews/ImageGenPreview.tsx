@@ -36,6 +36,12 @@ export const ImageGenPreview: React.FC<Props> = ({ data }) => {
             </span>
           </div>
           <div className="flex justify-between text-slate-400">
+            <span>Speed:</span>
+            <span className="font-mono text-cyan-300 font-medium">
+              {data.config?.speed_preset === 'turbo_fast' ? '⚡ Turbo Fast' : (data.config?.speed_preset || 'Standard')}
+            </span>
+          </div>
+          <div className="flex justify-between text-slate-400">
             <span>Sampling:</span>
             <span className="font-mono text-amber-300 font-medium">
               {steps}st · {sampler}
