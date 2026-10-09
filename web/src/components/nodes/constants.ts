@@ -25,14 +25,17 @@ export const DEFAULT_PORTS: Record<string, { inputs: PortDefinition[]; outputs: 
     ]
   },
   output: {
-    inputs: [{ name: 'input', type: 'any', label: 'Final Content' }],
+    inputs: [
+      { name: 'response_text', type: 'any', label: 'Response Text' },
+      { name: 'input', type: 'any', label: 'Final Content' }
+    ],
     outputs: [{ name: 'output', type: 'any', label: 'Output Result' }]
   },
   prompt: {
     inputs: [
+      { name: 'input_text', type: 'string', label: 'Input Text' },
       { name: 'input', type: 'string', label: 'Query / Input' },
-      { name: 'history', type: 'string', label: 'History (Opt)' },
-      { name: 'context', type: 'string', label: 'Context (Opt)' }
+      { name: 'context_data', type: 'string', label: 'Context Data' }
     ],
     outputs: [
       { name: 'prompt', type: 'string', label: 'Built Prompt' },
@@ -51,10 +54,15 @@ export const DEFAULT_PORTS: Record<string, { inputs: PortDefinition[]; outputs: 
     ]
   },
   router: {
-    inputs: [{ name: 'input', type: 'any', label: 'Condition Target' }],
+    inputs: [
+      { name: 'input_text', type: 'any', label: 'Input Text' },
+      { name: 'input', type: 'any', label: 'Condition Target' }
+    ],
     outputs: [
-      { name: 'branch_true', type: 'any', label: 'True / Matched' },
-      { name: 'branch_false', type: 'any', label: 'False / Default' }
+      { name: 'true_branch', type: 'any', label: 'True / Matched' },
+      { name: 'false_branch', type: 'any', label: 'False / Default' },
+      { name: 'branch_true', type: 'any', label: 'True (Alt)' },
+      { name: 'branch_false', type: 'any', label: 'False (Alt)' }
     ]
   },
   llm_router: {
@@ -128,6 +136,7 @@ export const DEFAULT_PORTS: Record<string, { inputs: PortDefinition[]; outputs: 
       { name: 'negative_prompt', type: 'string', label: 'Negative Prompt' }
     ],
     outputs: [
+      { name: 'markdown_image', type: 'string', label: 'Markdown Image Syntax' },
       { name: 'image_url', type: 'string', label: 'Generated Image URL' },
       { name: 'metadata', type: 'any', label: 'Generation Meta' }
     ]

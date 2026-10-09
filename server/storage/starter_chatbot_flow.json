@@ -1,0 +1,178 @@
+{
+  "id": "starter_chatbot_flow",
+  "name": "Standard Conversational AI Pipeline",
+  "description": "Workflow tự động nhận diện ý định: nếu người dùng yêu cầu vẽ/tạo ảnh thì rẽ sang nhánh ComfyUI, ngược lại chuyển sang nhánh LLM trả lời văn bản.",
+  "nodes": [
+    {
+      "id": "node_input",
+      "type": "input",
+      "title": "User Query Input",
+      "position": {
+        "x": -260,
+        "y": 40
+      },
+      "data": {
+        "title": "User Query Input",
+        "config": {
+          "default_query": "Vẽ cho tôi một chú mèo máy cyberpunk, phong cách neon 8k"
+        }
+      }
+    },
+    {
+      "id": "node_router_intent",
+      "type": "router",
+      "title": "Intent Router (Image vs Text)",
+      "position": {
+        "x": 100,
+        "y": 40
+      },
+      "data": {
+        "title": "Intent Router (Image vs Text)",
+        "config": {
+          "mode": "if_else",
+          "rule_type": "regex",
+          "target_pattern": "(?i)(vẽ|tạo ảnh|tạo hình|sinh ảnh|vẽ tranh|bức tranh|hình ảnh|tấm ảnh|photo|picture|image|draw|generate image|paint|sketch|illustration)"
+        }
+      }
+    },
+    {
+      "id": "node_prompt",
+      "type": "prompt",
+      "title": "Text Prompt Template",
+      "position": {
+        "x": 460,
+        "y": -140
+      },
+      "data": {
+        "title": "Text Prompt Template",
+        "config": {
+          "system_template": "Bạn là chuyên gia kiến trúc phần mềm thuộc hệ sinh thái ZeroUniverse, phản hồi súc tích, chuyên nghiệp và chính xác.",
+          "user_template": "Câu hỏi từ người dùng:\n{input_text}"
+        }
+      }
+    },
+    {
+      "id": "node_llm",
+      "type": "llm",
+      "title": "LLM Inference Engine",
+      "position": {
+        "x": 800,
+        "y": -140
+      },
+      "data": {
+        "title": "LLM Inference Engine",
+        "config": {
+          "provider": "ollama",
+          "model": "custom",
+          "temperature": 0.7,
+          "max_tokens": 5206,
+          "api_base": "http://192.168.10.7:1234/v1",
+          "api_key": "ollama",
+          "custom_model": "google/gemma-4-e4b"
+        }
+      }
+    },
+    {
+      "id": "node_prompt_4356",
+      "type": "prompt",
+      "title": "Image Prompt Styler",
+      "position": {
+        "x": 460,
+        "y": 220
+      },
+      "data": {
+        "title": "Image Prompt Styler",
+        "config": {
+          "system_template": "Enhance user prompt for AI visual generation.",
+          "user_template": "{input_text}"
+        }
+      }
+    },
+    {
+      "id": "node_image_gen_6585",
+      "type": "image_gen",
+      "title": "AI Image Generator",
+      "position": {
+        "x": 800,
+        "y": 220
+      },
+      "data": {
+        "title": "AI Image Generator",
+        "config": {
+          "provider": "comfyui_local",
+          "aspect_ratio": "1:1",
+          "comfyui_base_url": "http://192.168.10.7:8188/",
+          "quality": "standard",
+          "api_key": ""
+        }
+      }
+    },
+    {
+      "id": "node_output",
+      "type": "output",
+      "title": "Chatbot Response",
+      "position": {
+        "x": 1180,
+        "y": 40
+      },
+      "data": {
+        "title": "Chatbot Response",
+        "config": {
+          "prefix": "",
+          "suffix": ""
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge_input_to_router",
+      "source": "node_input",
+      "target": "node_router_intent",
+      "sourceHandle": "query",
+      "targetHandle": "input_text"
+    },
+    {
+      "id": "edge_router_to_text_prompt",
+      "source": "node_router_intent",
+      "target": "node_prompt",
+      "sourceHandle": "false_branch",
+      "targetHandle": "input_text"
+    },
+    {
+      "id": "edge_text_prompt_to_llm",
+      "source": "node_prompt",
+      "target": "node_llm",
+      "sourceHandle": "prompt",
+      "targetHandle": "prompt"
+    },
+    {
+      "id": "edge_llm_to_output",
+      "source": "node_llm",
+      "target": "node_output",
+      "sourceHandle": "reply",
+      "targetHandle": "response_text"
+    },
+    {
+      "id": "edge_router_to_img_prompt",
+      "source": "node_router_intent",
+      "target": "node_prompt_4356",
+      "sourceHandle": "true_branch",
+      "targetHandle": "input_text"
+    },
+    {
+      "id": "edge_img_prompt_to_image_gen",
+      "source": "node_prompt_4356",
+      "target": "node_image_gen_6585",
+      "sourceHandle": "prompt",
+      "targetHandle": "prompt"
+    },
+    {
+      "id": "edge_image_gen_to_output",
+      "source": "node_image_gen_6585",
+      "target": "node_output",
+      "sourceHandle": "markdown_image",
+      "targetHandle": "response_text"
+    }
+  ]
+}

@@ -138,21 +138,27 @@ function FlowCanvas() {
     });
   }, [handleOpenConfigModal, handleDeleteNode, setNodes]);
 
-  const bindNode = useCallback((n: any): Node<CustomNodeData> => {
-    const title = n.title || n.data?.title || n.type;
-    const config = n.data?.config || {};
-    return {
-      ...n,
-      data: {
-        ...n.data,
-        title,
-        config,
-        openConfigModal: () => handleOpenConfigModal(n.id, title, n.type, config),
-        onDuplicate: () => handleDuplicateNode(n.id),
-        onDelete: () => handleDeleteNode(n.id)
-      }
-    };
-  }, [handleOpenConfigModal, handleDuplicateNode, handleDeleteNode]);
+  const bindNode = useCallback(
+    (n: any, defsList?: NodeMetadata[]): Node<CustomNodeData> => {
+      const title = n.title || n.data?.title || n.type;
+      const config = n.data?.config || {};
+      const availableDefs = defsList || nodeDefs;
+      const meta = availableDefs.find((d) => d.type === n.type);
+      return {
+        ...n,
+        data: {
+          ...n.data,
+          metadata: meta || n.data?.metadata,
+          title,
+          config,
+          openConfigModal: () => handleOpenConfigModal(n.id, title, n.type, config),
+          onDuplicate: () => handleDuplicateNode(n.id),
+          onDelete: () => handleDeleteNode(n.id)
+        }
+      };
+    },
+    [nodeDefs, handleOpenConfigModal, handleDuplicateNode, handleDeleteNode]
+  );
 
   const loadWorkflowList = useCallback(async () => {
     try {
@@ -174,7 +180,7 @@ function FlowCanvas() {
         const flow = await fetchWorkflow(currentFlowId);
         if (flow) {
           setFlowName(flow.name || 'Standard Chatbot Flow');
-          setNodes(flow.nodes.map(bindNode));
+          setNodes(flow.nodes.map((n) => bindNode(n, defs)));
           setEdges(flow.edges || []);
           setTimeout(() => reactFlowInstance.fitView({ padding: 0.2, duration: 400 }), 150);
         }
@@ -183,7 +189,7 @@ function FlowCanvas() {
       }
     }
     init();
-  }, [bindNode, currentFlowId, loadWorkflowList, reactFlowInstance]);
+  }, [currentFlowId, loadWorkflowList, reactFlowInstance]);
 
   const handleSaveNodeConfig = useCallback((nodeId: string, newTitle: string, newConfig: Record<string, any>) => {
     setNodes((nds) =>
@@ -564,7 +570,7 @@ function FlowCanvas() {
       const flow = await fetchWorkflow(flowId);
       setCurrentFlowId(flow.id || flowId);
       setFlowName(flow.name || flowId);
-      setNodes(flow.nodes.map(bindNode));
+      setNodes(flow.nodes.map((n) => bindNode(n, nodeDefs)));
       setEdges(flow.edges || []);
       localStorage.setItem('zflow_active_flow_id', flow.id || flowId);
       setTimeout(() => reactFlowInstance.fitView({ padding: 0.2, duration: 400 }), 150);

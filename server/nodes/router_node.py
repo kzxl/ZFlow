@@ -167,4 +167,6 @@ class RouterNode(BaseNode):
                 result[b_id] = text if active_branch == b_id else None
 
         result[active_branch] = text
+        result["branch_true"] = result["true_branch"]
+        result["branch_false"] = result["false_branch"]
         return result
