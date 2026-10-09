@@ -28,7 +28,9 @@ import {
   Webhook,
   Workflow,
   Network,
-  Key
+  Key,
+  Ban,
+  Maximize2
 } from 'lucide-react';
 import { NodeMetadata, NodeCategory } from '../types/workflow';
 
@@ -44,6 +46,8 @@ const ICONS: Record<string, React.ElementType> = {
   Image,
   Palette,
   Eye,
+  Ban,
+  Maximize2,
   Wrench,
   Database,
   Send,

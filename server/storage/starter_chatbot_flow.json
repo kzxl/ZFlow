@@ -1,7 +1,7 @@
 {
   "id": "starter_chatbot_flow",
   "name": "Standard Conversational AI Pipeline",
-  "description": "Workflow tự động nhận diện ý định: nếu người dùng yêu cầu vẽ/tạo ảnh thì rẽ sang nhánh ComfyUI, ngược lại chuyển sang nhánh LLM trả lời văn bản.",
+  "description": "Workflow tự động nhận diện ý định: nếu người dùng yêu cầu vẽ/tạo ảnh thì rẽ sang nhánh ComfyUI (kèm Negative Prompt & Aspect Ratio), ngược lại chuyển sang nhánh LLM trả lời văn bản.",
   "nodes": [
     {
       "id": "node_input",
@@ -56,7 +56,7 @@
       "type": "llm",
       "title": "LLM Inference Engine",
       "position": {
-        "x": 800,
+        "x": 850,
         "y": -140
       },
       "data": {
@@ -78,7 +78,7 @@
       "title": "Image Prompt Styler",
       "position": {
         "x": 460,
-        "y": 220
+        "y": 120
       },
       "data": {
         "title": "Image Prompt Styler",
@@ -89,12 +89,46 @@
       }
     },
     {
+      "id": "node_negative_prompt",
+      "type": "negative_prompt",
+      "title": "Negative Prompt",
+      "position": {
+        "x": 460,
+        "y": 320
+      },
+      "data": {
+        "title": "Negative Prompt",
+        "config": {
+          "preset": "universal_clean",
+          "custom_negative": "blurry, low quality, bad anatomy, deformed, worst quality, text, watermark",
+          "append_preset": true
+        }
+      }
+    },
+    {
+      "id": "node_aspect_ratio",
+      "type": "aspect_ratio",
+      "title": "Aspect Ratio",
+      "position": {
+        "x": 460,
+        "y": 520
+      },
+      "data": {
+        "title": "Aspect Ratio",
+        "config": {
+          "aspect_ratio": "3:2",
+          "custom_width": 1248,
+          "custom_height": 832
+        }
+      }
+    },
+    {
       "id": "node_image_gen_6585",
       "type": "image_gen",
       "title": "AI Image Generator",
       "position": {
-        "x": 800,
-        "y": 220
+        "x": 850,
+        "y": 280
       },
       "data": {
         "title": "AI Image Generator",
@@ -123,7 +157,7 @@
       "type": "output",
       "title": "Chatbot Response",
       "position": {
-        "x": 1180,
+        "x": 1240,
         "y": 40
       },
       "data": {
@@ -172,11 +206,39 @@
       "targetHandle": "input_text"
     },
     {
+      "id": "edge_router_to_neg_prompt",
+      "source": "node_router_intent",
+      "target": "node_negative_prompt",
+      "sourceHandle": "true_branch",
+      "targetHandle": "text"
+    },
+    {
+      "id": "edge_router_to_aspect_ratio",
+      "source": "node_router_intent",
+      "target": "node_aspect_ratio",
+      "sourceHandle": "true_branch",
+      "targetHandle": "ratio"
+    },
+    {
       "id": "edge_img_prompt_to_image_gen",
       "source": "node_prompt_4356",
       "target": "node_image_gen_6585",
       "sourceHandle": "prompt",
       "targetHandle": "prompt"
+    },
+    {
+      "id": "edge_neg_prompt_to_image_gen",
+      "source": "node_negative_prompt",
+      "target": "node_image_gen_6585",
+      "sourceHandle": "negative_prompt",
+      "targetHandle": "negative_prompt"
+    },
+    {
+      "id": "edge_aspect_ratio_to_image_gen",
+      "source": "node_aspect_ratio",
+      "target": "node_image_gen_6585",
+      "sourceHandle": "aspect_ratio",
+      "targetHandle": "aspect_ratio"
     },
     {
       "id": "edge_image_gen_to_output",

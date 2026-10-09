@@ -36,6 +36,52 @@ export const NodeBodyPreview: React.FC<Props> = ({ type, data }) => {
     case 'router':
       return <RouterPreview data={data} />;
 
+    case 'negative_prompt':
+      return (
+        <div className="bg-slate-900/60 p-2 rounded-lg border border-rose-500/25 text-[10px] space-y-1">
+          <div className="flex justify-between items-center text-slate-400">
+            <span>Filter Preset:</span>
+            <span className="font-mono text-rose-300 font-semibold px-1 py-0.5 rounded bg-rose-950/40 text-[9px]">
+              {data.config?.preset || 'universal_clean'}
+            </span>
+          </div>
+          <div className="text-slate-400 text-[9px] line-clamp-2 italic bg-slate-950/50 p-1.5 rounded border border-slate-800/80 leading-relaxed font-mono">
+            {data.config?.custom_negative || 'blurry, low quality, bad anatomy, deformed...'}
+          </div>
+        </div>
+      );
+
+    case 'aspect_ratio': {
+      const ratio = data.config?.aspect_ratio || '3:2';
+      const resMap: Record<string, string> = {
+        '3:2': '1248 × 832 (Landscape)',
+        '2:3': '832 × 1248 (Portrait)',
+        '1:1': '1024 × 1024 (Square)',
+        '16:9': '1280 × 720 (Cinema)',
+        '9:16': '720 × 1280 (Story)',
+        '4:3': '1152 × 864 (Classic)',
+        '3:4': '864 × 1152 (Portrait)',
+        '21:9': '1536 × 640 (Ultrawide)',
+        'custom': `${data.config?.custom_width || 1248} × ${data.config?.custom_height || 832}`
+      };
+      return (
+        <div className="bg-slate-900/60 p-2 rounded-lg border border-cyan-500/25 text-[10px] space-y-1.5">
+          <div className="flex justify-between items-center text-slate-400">
+            <span>Tỉ lệ:</span>
+            <span className="font-mono font-bold px-1.5 py-0.5 rounded bg-cyan-950/40 border border-cyan-800/50 text-cyan-300 text-[10px]">
+              {ratio}
+            </span>
+          </div>
+          <div className="flex justify-between items-center text-slate-400 text-[9px]">
+            <span>Độ phân giải:</span>
+            <span className="font-mono text-slate-300 font-medium">
+              {resMap[ratio] || '1248 × 832'}
+            </span>
+          </div>
+        </div>
+      );
+    }
+
     case 'prompt':
       return (
         <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 text-slate-400 line-clamp-2 italic text-[10px] leading-relaxed">

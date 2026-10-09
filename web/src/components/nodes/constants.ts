@@ -133,12 +133,34 @@ export const DEFAULT_PORTS: Record<string, { inputs: PortDefinition[]; outputs: 
   image_gen: {
     inputs: [
       { name: 'prompt', type: 'string', label: 'Image Prompt' },
-      { name: 'negative_prompt', type: 'string', label: 'Negative Prompt' }
+      { name: 'negative_prompt', type: 'string', label: 'Negative Prompt' },
+      { name: 'aspect_ratio', type: 'string', label: 'Aspect Ratio' }
     ],
     outputs: [
       { name: 'markdown_image', type: 'string', label: 'Markdown Image Syntax' },
       { name: 'image_url', type: 'string', label: 'Generated Image URL' },
       { name: 'metadata', type: 'any', label: 'Generation Meta' }
+    ]
+  },
+  negative_prompt: {
+    inputs: [
+      { name: 'text', type: 'string', label: 'Custom Negative' },
+      { name: 'append_text', type: 'string', label: 'Extra Tokens' }
+    ],
+    outputs: [
+      { name: 'negative_prompt', type: 'string', label: 'Negative Prompt' },
+      { name: 'text', type: 'string', label: 'Text Output' }
+    ]
+  },
+  aspect_ratio: {
+    inputs: [
+      { name: 'ratio', type: 'string', label: 'Ratio Override' }
+    ],
+    outputs: [
+      { name: 'aspect_ratio', type: 'string', label: 'Aspect Ratio Code' },
+      { name: 'width', type: 'number', label: 'Width (px)' },
+      { name: 'height', type: 'number', label: 'Height (px)' },
+      { name: 'resolution_label', type: 'string', label: 'Resolution Label' }
     ]
   },
   prompt_styler: {
