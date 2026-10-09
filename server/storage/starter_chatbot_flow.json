@@ -31,7 +31,7 @@
         "config": {
           "mode": "if_else",
           "rule_type": "regex",
-          "target_pattern": "(?i)(vẽ|tạo ảnh|tạo hình|sinh ảnh|vẽ tranh|bức tranh|hình ảnh|tấm ảnh|photo|picture|image|draw|generate image|paint|sketch|illustration)"
+          "target_pattern": "(?i)(vẽ|tạo ảnh|tạo hình|sinh ảnh|vẽ tranh|bức tranh|hình ảnh|tấm ảnh|photo|picture|image|draw|generate image|paint|sketch|illustration|\\bve\\b|\\btao anh\\b|\\btao hinh\\b|\\bsinh anh\\b|\\bve tranh\\b|\\bbuc tranh\\b|\\bbuc anh\\b)"
         }
       }
     },
