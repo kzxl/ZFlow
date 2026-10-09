@@ -339,6 +339,21 @@ export const NodeConfigModal: React.FC<NodeConfigModalProps> = ({
                   </select>
                 )}
 
+                {fieldSchema.type === 'boolean' && (
+                  <label className="relative inline-flex items-center cursor-pointer gap-2.5 py-1">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(val)}
+                      onChange={(e) => handleChange(fieldKey, e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[6px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                    <span className="text-[11px] text-slate-300 font-mono select-none">
+                      {Boolean(val) ? 'Bật (Enabled)' : 'Tắt (Disabled)'}
+                    </span>
+                  </label>
+                )}
+
                 {fieldSchema.type === 'number' && (
                   <div className="space-y-1">
                     {fieldSchema.min !== undefined && fieldSchema.max !== undefined && (

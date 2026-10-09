@@ -128,3 +128,57 @@ async def api_enchant_prompt(payload: EnchantPromptRequest):
         enable_subject_detailing=payload.enable_subject_detailing if payload.enable_subject_detailing is not None else True
     )
     return result
+
+
+class ComfyUiTestRequest(BaseModel):
+    base_url: str = Field(default="http://192.168.10.7:8188", description="ComfyUI server URL")
+
+
+@router.post("/api/system/comfyui/test")
+async def test_comfyui_connection(req: ComfyUiTestRequest):
+    """
+    Pings the user's ComfyUI server, checks queue, and retrieves active model/workflow info.
+    """
+    base_url = req.base_url.rstrip("/")
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=6.0) as client:
+            # 1. Check /queue
+            q_resp = await client.get(f"{base_url}/queue")
+            q_data = q_resp.json() if q_resp.status_code == 200 else {}
+
+            # 2. Check /history to get active workflow models
+            h_resp = await client.get(f"{base_url}/history")
+            h_data = h_resp.json() if h_resp.status_code == 200 else {}
+            active_models = []
+            if h_data:
+                latest_id = list(h_data.keys())[-1]
+                prompt_tuple = h_data[latest_id].get("prompt", [])
+                if len(prompt_tuple) > 2:
+                    wf = prompt_tuple[2]
+                    for nid, node in wf.items():
+                        inputs = node.get("inputs", {})
+                        if "unet_name" in inputs:
+                            active_models.append(f"UNET: {inputs['unet_name']}")
+                        elif "ckpt_name" in inputs:
+                            active_models.append(f"Checkpoint: {inputs['ckpt_name']}")
+                        elif "vae_name" in inputs:
+                            active_models.append(f"VAE: {inputs['vae_name']}")
+
+            return {
+                "status": "connected",
+                "base_url": base_url,
+                "queue_running": len(q_data.get("queue_running", [])),
+                "queue_pending": len(q_data.get("queue_pending", [])),
+                "active_models": list(set(active_models)),
+                "history_count": len(h_data),
+                "message": "Kết nối thành công tới ComfyUI Server!"
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "base_url": base_url,
+            "error": str(e),
+            "message": f"Không thể kết nối tới ComfyUI: {e}"
+        }
+

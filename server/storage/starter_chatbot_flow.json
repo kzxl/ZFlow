@@ -100,8 +100,19 @@
         "title": "AI Image Generator",
         "config": {
           "provider": "comfyui_local",
-          "aspect_ratio": "1:1",
-          "comfyui_base_url": "http://192.168.10.7:8188/",
+          "comfyui_base_url": "http://192.168.10.7:8188",
+          "workflow_mode": "auto_history",
+          "enable_prompt_expansion": true,
+          "steps": 25,
+          "cfg_scale": 1.0,
+          "sampler_name": "euler",
+          "scheduler": "simple",
+          "denoise": 1.0,
+          "aspect_ratio": "3:2",
+          "timeout_seconds": 240,
+          "fallback_simulator": false,
+          "seed": -1,
+          "negative_prompt": "",
           "quality": "standard",
           "api_key": ""
         }
