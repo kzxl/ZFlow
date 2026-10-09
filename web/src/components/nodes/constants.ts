@@ -99,11 +99,13 @@ export const DEFAULT_PORTS: Record<string, { inputs: PortDefinition[]; outputs: 
   memory: {
     inputs: [
       { name: 'user_message', type: 'string', label: 'User Message' },
-      { name: 'bot_message', type: 'string', label: 'Bot Message' }
+      { name: 'bot_message', type: 'string', label: 'Bot Message' },
+      { name: 'working_memory', type: 'object', label: 'Working Memory Scratchpad (Opt)' }
     ],
     outputs: [
       { name: 'formatted_history', type: 'string', label: 'Formatted History' },
       { name: 'expanded_context', type: 'string', label: 'Expanded Context' },
+      { name: 'working_memory', type: 'object', label: 'Active Working Memory' },
       { name: 'chat_history', type: 'array', label: 'History Array' }
     ]
   },
@@ -111,11 +113,13 @@ export const DEFAULT_PORTS: Record<string, { inputs: PortDefinition[]; outputs: 
     inputs: [
       { name: 'query', type: 'string', label: 'Search Query' },
       { name: 'user_role', type: 'string', label: 'User Role (Opt)' },
-      { name: 'learn_fact', type: 'string', label: 'Learn Fact (Opt)' }
+      { name: 'learn_fact', type: 'string', label: 'Learn Fact (Opt)' },
+      { name: 'namespace', type: 'string', label: 'Domain Namespace (Opt)' }
     ],
     outputs: [
       { name: 'context', type: 'string', label: 'Retrieved Docs' },
-      { name: 'augmented_prompt', type: 'string', label: 'Augmented Prompt' }
+      { name: 'augmented_prompt', type: 'string', label: 'Augmented Prompt' },
+      { name: 'namespace', type: 'string', label: 'Active Namespace' }
     ]
   },
   image_gen: {

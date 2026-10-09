@@ -19,17 +19,24 @@ class RagNode(BaseNode):
     inputs = [
         PortDef(name="query", data_type="string", label="Search Query", required=True),
         PortDef(name="user_role", data_type="string", label="User Role for RBAC (Optional)", required=False),
-        PortDef(name="learn_fact", data_type="string", label="New Fact to Self-Learn (Optional)", required=False)
+        PortDef(name="learn_fact", data_type="string", label="New Fact to Self-Learn (Optional)", required=False),
+        PortDef(name="namespace", data_type="string", label="Domain / Tenant Namespace (Optional)", required=False)
     ]
     outputs = [
         PortDef(name="context", data_type="string", label="Formatted Knowledge Context"),
         PortDef(name="chunks", data_type="any", label="Retrieved Chunks List"),
         PortDef(name="top_score", data_type="number", label="Top Similarity Score"),
         PortDef(name="has_match", data_type="boolean", label="Has Relevant Match"),
-        PortDef(name="learned_status", data_type="string", label="Self-Learning Status")
+        PortDef(name="learned_status", data_type="string", label="Self-Learning Status"),
+        PortDef(name="namespace", data_type="string", label="Active Search Namespace")
     ]
 
     config_schema = {
+        "namespace": {
+            "type": "string",
+            "label": "Domain / Tenant Namespace",
+            "default": ""
+        },
         "top_k": {
             "type": "number",
             "label": "Top Chunks to Retrieve",
@@ -111,14 +118,16 @@ class RagNode(BaseNode):
         doc_filter = config.get("doc_filter") or None
         fmt = config.get("output_format", "numbered")
         custom_kw = config.get("custom_knowledge", "").strip()
+        namespace = str(inputs.get("namespace") or context.get_variable("namespace") or config.get("namespace") or "").strip() or None
 
-        # 1. Search knowledge store with RBAC role filter
+        # 1. Search knowledge store with RBAC role filter, namespace isolation, and Ebbinghaus decay
         results = knowledge_store.search(
             query=query, 
             top_k=top_k, 
             min_score=min_score, 
             doc_filter=doc_filter,
-            user_role=user_role
+            user_role=user_role,
+            namespace=namespace
         )
 
         # 2. Append inline custom knowledge if provided and nothing or low matches
@@ -155,12 +164,15 @@ class RagNode(BaseNode):
         context.set_variable("knowledge_context", formatted_context)
         context.set_variable("context_data", formatted_context)
         context.set_variable("rag_learned_status", learned_status)
-        context.log("info", f"RAG retrieved {len(results)} chunks for role '{user_role}' (top score: {top_score})")
+        if namespace:
+            context.set_variable("namespace", namespace)
+        context.log("info", f"RAG retrieved {len(results)} chunks for role '{user_role}', namespace '{namespace}' (top score: {top_score})")
 
         return {
             "context": formatted_context,
             "chunks": results,
             "top_score": top_score,
             "has_match": has_match,
-            "learned_status": learned_status
+            "learned_status": learned_status,
+            "namespace": namespace or "all"
         }

@@ -2,7 +2,7 @@
 Workflow Execution Router.
 Handles batch execution and real-time Server-Sent Events (SSE) streaming.
 """
-from fastapi import APIRouter
+from fastapi import APIRouter, Request, Header
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional
@@ -12,6 +12,7 @@ from engine.graph import WorkflowGraph
 from engine.context import ExecutionContext
 from engine.runner import WorkflowRunner
 from engine.memory_store import memory_store
+from engine.ingress_security import verify_and_audit_ingress, bind_ingress_to_context
 
 router = APIRouter(tags=["Execution"])
 
@@ -24,16 +25,23 @@ class RunRequest(BaseModel):
 
 
 @router.post("/api/workflows/run")
-async def run_workflow_batch(request: RunRequest):
+async def run_workflow_batch(
+    request: RunRequest,
+    http_request: Request,
+    authorization: Optional[str] = Header(None)
+):
     """
     Runs the workflow in non-streaming batch mode.
-    Auto-persists dialogue turn to SQLite session memory.
+    Pre-audits access token, attaches trusted session & identity, and persists dialogue turn.
     """
+    identity = verify_and_audit_ingress(http_request, authorization, session_id=request.session_id)
+
     graph = WorkflowGraph.from_dict(request.workflow)
     variables = request.variables.copy()
     variables["input"] = request.input
     
-    context = ExecutionContext(session_id=request.session_id, initial_variables=variables)
+    context = ExecutionContext(session_id=identity.session_id, initial_variables=variables)
+    bind_ingress_to_context(context, identity)
     runner = WorkflowRunner()
     
     result = await runner.run(graph, context)
@@ -48,17 +56,23 @@ async def run_workflow_batch(request: RunRequest):
 
 
 @router.post("/api/chat/stream")
-async def chat_stream(request: RunRequest):
+async def chat_stream(
+    request: RunRequest,
+    http_request: Request,
+    authorization: Optional[str] = Header(None)
+):
     """
     Runs the workflow with Server-Sent Events (SSE) streaming for real-time chat interactions.
-    Yields tokens, node transitions, and completion payloads.
-    Auto-persists dialogue turn to SQLite session memory upon completion.
+    Pre-audits access token, attaches trusted session & identity.
     """
+    identity = verify_and_audit_ingress(http_request, authorization, session_id=request.session_id)
+
     graph = WorkflowGraph.from_dict(request.workflow)
     variables = request.variables.copy()
     variables["input"] = request.input
 
-    context = ExecutionContext(session_id=request.session_id, initial_variables=variables)
+    context = ExecutionContext(session_id=identity.session_id, initial_variables=variables)
+    bind_ingress_to_context(context, identity)
     runner = WorkflowRunner()
 
     async def event_generator():

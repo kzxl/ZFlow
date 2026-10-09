@@ -22,12 +22,14 @@ class MemoryNode(BaseNode):
     inputs = [
         PortDef(name="session_id", data_type="string", label="Session ID (Optional)", required=False),
         PortDef(name="user_message", data_type="string", label="New User Msg (Optional)", required=False),
-        PortDef(name="bot_message", data_type="string", label="New Bot Msg (Optional)", required=False)
+        PortDef(name="bot_message", data_type="string", label="New Bot Msg (Optional)", required=False),
+        PortDef(name="working_memory", data_type="object", label="Task Scratchpad / Working State (Optional)", required=False)
     ]
     outputs = [
         PortDef(name="chat_history", data_type="array", label="Dialogue History (Array)"),
         PortDef(name="formatted_history", data_type="string", label="Formatted String"),
         PortDef(name="expanded_context", data_type="string", label="Expanded Context with Pinned Facts"),
+        PortDef(name="working_memory", data_type="object", label="Active Working Memory Scratchpad"),
         PortDef(name="pinned_entities", data_type="any", label="Pinned Facts & Entities"),
         PortDef(name="turn_count", data_type="number", label="Turn Count"),
         PortDef(name="summary", data_type="string", label="Context Summary")
@@ -39,6 +41,11 @@ class MemoryNode(BaseNode):
             "label": "Memory Strategy",
             "options": ["adaptive_context_expansion", "sliding_window", "token_budget", "summary_buffer", "full_history"],
             "default": "adaptive_context_expansion"
+        },
+        "enable_anti_redundancy": {
+            "type": "boolean",
+            "label": "Enable AME Anti-Redundancy Filter (>85% Overlap)",
+            "default": True
         },
         "enable_entity_pinning": {
             "type": "boolean",
@@ -154,14 +161,35 @@ class MemoryNode(BaseNode):
             active_history = raw_history[-window_size:] if len(raw_history) > window_size else raw_history
 
         elif strategy == "token_budget":
-            # Rough token estimate: ~4 chars per token
+            # AME-inspired Greedy Knapsack Packing with Anti-Redundancy Filter
             budget_chars = token_budget * 4
             running_chars = 0
             selected_reversed = []
+            selected_contents: List[str] = []
+            enable_anti_redundancy = config.get("enable_anti_redundancy", True)
+
+            def is_redundant_text(new_text: str, existing_texts: List[str], threshold: float = 0.85) -> bool:
+                new_words = set(re.findall(r'\w+', new_text.lower()))
+                if not new_words:
+                    return False
+                for prev in existing_texts:
+                    prev_words = set(re.findall(r'\w+', prev.lower()))
+                    if not prev_words:
+                        continue
+                    intersection = len(new_words & prev_words)
+                    min_len = min(len(new_words), len(prev_words))
+                    if min_len > 0 and (intersection / min_len) > threshold:
+                        return True
+                return False
+
             for msg in reversed(raw_history):
-                chars = len(msg.get("content", ""))
+                content = str(msg.get("content", ""))
+                chars = len(content)
                 if running_chars + chars <= budget_chars:
+                    if enable_anti_redundancy and is_redundant_text(content, selected_contents):
+                        continue
                     selected_reversed.append(msg)
+                    selected_contents.append(content)
                     running_chars += chars
                 else:
                     break
@@ -187,6 +215,12 @@ class MemoryNode(BaseNode):
         if pinned_str:
             formatted_str = f"{pinned_str}\n\n{formatted_str}"
 
+        # Working Memory Scratchpad (AME-inspired active task state)
+        working_memory = inputs.get("working_memory") or context.get_variable("working_memory") or {}
+        if not isinstance(working_memory, dict):
+            working_memory = {"task_state": working_memory}
+        context.set_variable("working_memory", working_memory)
+
         # Mirror variables into ExecutionContext
         context.chat_history = active_history
         context.set_variable("chat_history", active_history)
@@ -202,6 +236,7 @@ class MemoryNode(BaseNode):
             "chat_history": active_history,
             "formatted_history": formatted_str,
             "expanded_context": formatted_str,
+            "working_memory": working_memory,
             "pinned_entities": pinned_facts,
             "turn_count": len(raw_history),
             "summary": summary_text

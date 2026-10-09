@@ -3,7 +3,7 @@ Public Flow API Router.
 Enables external applications, Discord/Telegram bots, and webhooks to trigger workflows by Flow ID
 or via the special 'active' alias (targeting the currently designated active workflow).
 """
-from fastapi import APIRouter, Path, Request, HTTPException, Query
+from fastapi import APIRouter, Path, Request, HTTPException, Query, Header
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional
@@ -16,6 +16,7 @@ from engine.context import ExecutionContext
 from engine.runner import WorkflowRunner
 from engine.memory_store import memory_store
 from engine.settings_manager import settings_manager
+from engine.ingress_security import verify_and_audit_ingress, bind_ingress_to_context
 from .workflows import load_flow_data
 
 router = APIRouter(tags=["Public Flow API"])
@@ -76,16 +77,20 @@ def extract_workflow_outputs(graph: WorkflowGraph, context: ExecutionContext, fi
 @router.post("/api/v1/flows/{flow_id}/run")
 async def trigger_flow_api(
     flow_id: str = Path(..., description="ID of the workflow to execute, or 'active' for the currently active workflow"),
-    request: FlowExecuteRequest = FlowExecuteRequest()
+    request: FlowExecuteRequest = FlowExecuteRequest(),
+    http_request: Request = None,
+    authorization: Optional[str] = Header(None)
 ):
     """
     Public API trigger: Automatically loads and executes a workflow by flow_id or 'active'.
-    Maps external input variables and returns structured JSON outputs according to the active workflow.
+    Pre-audits access token, attaches trusted session & identity, and executes the active workflow.
     """
+    identity = verify_and_audit_ingress(http_request, authorization, session_id=request.session_id)
+
     resolved_id, flow_data = resolve_target_flow(flow_id)
     graph = WorkflowGraph.from_dict(flow_data)
 
-    session_id = request.session_id or f"api_sess_{uuid.uuid4().hex[:8]}"
+    session_id = identity.session_id
     initial_vars = request.parameters.copy()
     initial_vars.update(request.inputs)
     
@@ -98,6 +103,7 @@ async def trigger_flow_api(
         initial_vars["query"] = request.inputs["input"]
 
     context = ExecutionContext(session_id=session_id, initial_variables=initial_vars)
+    bind_ingress_to_context(context, identity)
     runner = WorkflowRunner()
 
     start_t = time.time()
@@ -120,6 +126,7 @@ async def trigger_flow_api(
         "is_active_route": (flow_id.lower() == "active"),
         "flow_name": flow_data.get("name", resolved_id),
         "session_id": session_id,
+        "identity": identity.to_dict(),
         "outputs": outputs_dict,
         "node_outputs": context.node_outputs,
         "execution_time_ms": total_time_ms,
@@ -130,16 +137,21 @@ async def trigger_flow_api(
 @router.post("/api/v1/flows/{flow_id}/stream")
 async def trigger_flow_stream_api(
     flow_id: str = Path(..., description="ID of the workflow to stream, or 'active' for the currently active workflow"),
-    request: FlowExecuteRequest = FlowExecuteRequest()
+    request: FlowExecuteRequest = FlowExecuteRequest(),
+    http_request: Request = None,
+    authorization: Optional[str] = Header(None)
 ):
     """
     Public API trigger: Automatically loads and executes a workflow with real-time SSE token streaming.
     Supports 'active' alias to always stream the currently active workflow.
+    Pre-audits access token and attaches trusted identity.
     """
+    identity = verify_and_audit_ingress(http_request, authorization, session_id=request.session_id)
+
     resolved_id, flow_data = resolve_target_flow(flow_id)
     graph = WorkflowGraph.from_dict(flow_data)
 
-    session_id = request.session_id or f"api_sess_{uuid.uuid4().hex[:8]}"
+    session_id = identity.session_id
     initial_vars = request.parameters.copy()
     initial_vars.update(request.inputs)
     
@@ -151,6 +163,7 @@ async def trigger_flow_stream_api(
         initial_vars["query"] = request.inputs["input"]
 
     context = ExecutionContext(session_id=session_id, initial_variables=initial_vars)
+    bind_ingress_to_context(context, identity)
     runner = WorkflowRunner()
 
     async def event_generator():

@@ -128,11 +128,12 @@ class KnowledgeStore:
         chunk_size: int = 400,
         chunk_overlap: int = 60,
         allowed_roles: Optional[List[str]] = None,
-        is_learned: int = 0
+        is_learned: int = 0,
+        metadata: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Splits document into semantic chunks with overlap and indexes term frequencies.
-        Supports RBAC roles and self-learning metadata.
+        Supports RBAC roles, domain namespaces, and custom metadata.
         """
         if not content.strip():
             return {"status": "error", "message": "Content is empty"}
@@ -161,8 +162,11 @@ class KnowledgeStore:
                     "title": title,
                     "source": source_type,
                     "allowed_roles": allowed_roles or ["all"],
-                    "is_learned": is_learned
+                    "is_learned": is_learned,
+                    "created_at": now
                 }
+                if metadata:
+                    meta.update(metadata)
 
                 cursor.execute(
                     "INSERT INTO chunks (doc_id, chunk_index, content, metadata_json, terms_json, allowed_roles, is_learned, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -253,11 +257,12 @@ class KnowledgeStore:
         top_k: int = 3,
         min_score: float = 0.15,
         doc_filter: Optional[str] = None,
-        user_role: str = "all"
+        user_role: str = "all",
+        namespace: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
-        Performs hybrid BM25/TF-IDF similarity ranking with RBAC role-based filtering
-        and Self-Learning freshness boosting.
+        Performs hybrid BM25/TF-IDF similarity ranking with RBAC role-based filtering,
+        domain namespace isolation, and AME-inspired Ebbinghaus retention decay.
         """
         query_tokens = tokenize(query)
         if not query_tokens:
@@ -303,12 +308,13 @@ class KnowledgeStore:
             except Exception:
                 roles = ["all"]
 
+            meta = json.loads(r["metadata_json"]) if r["metadata_json"] else {}
             chunk_data.append({
                 "id": r["id"],
                 "doc_id": r["doc_id"],
                 "chunk_index": r["chunk_index"],
                 "content": r["content"],
-                "metadata": json.loads(r["metadata_json"]) if r["metadata_json"] else {},
+                "metadata": meta,
                 "terms_json": r["terms_json"],
                 "allowed_roles": roles,
                 "is_learned": r["is_learned"] or 0,
@@ -317,7 +323,14 @@ class KnowledgeStore:
 
         # Calculate BM25 / TF-IDF score for each chunk
         results = []
+        now = time.time()
         for c in chunk_data:
+            # Domain Namespace Filtering
+            if namespace:
+                c_ns = c["metadata"].get("namespace") or c["doc_id"].split(":")[0] if ":" in c["doc_id"] else ""
+                if c_ns and c_ns != namespace:
+                    continue
+
             # RBAC Role Filtering: Skip chunk if user lacks required role
             chunk_roles = c.get("allowed_roles") or ["all"]
             if user_role != "admin" and "all" not in chunk_roles and user_role not in chunk_roles:
@@ -343,8 +356,16 @@ class KnowledgeStore:
                 if word in clean_content:
                     score += 0.3
 
+            # AME-inspired Ebbinghaus Decay & Retention Model
             if c.get("is_learned") == 1:
-                score += 1.0  # Freshness boost for self-learned knowledge
+                meta = c.get("metadata") or {}
+                created_at = meta.get("created_at") or now
+                delta_hours = max(0.0, (now - created_at) / 3600.0)
+                access_count = meta.get("access_count", 1)
+                # Retention Half-life (tau): base 72 hrs, scaled by log2 access frequency
+                tau = 72.0 * (1.0 + 0.5 * math.log2(1.0 + access_count))
+                retention = math.exp(-delta_hours / tau)
+                score += 1.0 * retention
 
             norm_score = round(min(score / 5.0, 1.0), 3)
             if norm_score >= min_score:
